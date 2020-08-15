@@ -26,8 +26,9 @@ var recomanded = [];
 var categories = [];
 var lastRefreashed = 0;
 
-var url = "mongodb+srv://manish:manish@cluster0.cqjkp.gcp.mongodb.net?retryWrites=true&w=majority";
+//var url = "mongodb+srv://manish:manish@cluster0.cqjkp.gcp.mongodb.net?retryWrites=true&w=majority";
 //var url = "mongodb://localhost:27017";
+var url= "mongodb+srv://manish:manish@cluster0.plkxv.mongodb.net?retryWrites=true&w=majority";
 
 const mailTransporter = nodemailer.createTransport({ 
   service: 'gmail', 
