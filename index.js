@@ -4,6 +4,7 @@ const Cryptr = require('cryptr');
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
 const express = require('express');
+const cors = require('cors')
 const body_parser = require('body-parser');
 const {
   ObjectId
@@ -16,11 +17,14 @@ const host="https://www.ctrlpluz.com"
 
 
 const app = express();
+/*
 app.use(function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*"); // update to match the domain you will make the request from
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
 });
+*/
+app.use(cors())
 app.use(body_parser.json())
 app.use(body_parser.raw())
 app.use(body_parser.urlencoded())
