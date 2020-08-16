@@ -174,7 +174,7 @@ app.post('/logIn', async (req, res, next) => {
         const result = await user_data.findOne({
           "mail_id": req.body.mail_id
         });
-
+        console.log( req.body)
 
         if (result != null) {
           var query = {
@@ -190,7 +190,7 @@ app.post('/logIn', async (req, res, next) => {
           };
           const result = await user_data.updateOne(query, values);
           //console.log(result);
-          if (result.modifiedCount == 1) {
+          if (result.matchedCount == 1) {
             const result = await user_data.findOne({
               "mail_id": req.body.mail_id
             });
@@ -219,6 +219,7 @@ app.post('/logIn', async (req, res, next) => {
           json.fav_tags = [];
 
           const result1 = await user_data.insertOne(json);
+          //console.log(result1)
           const result = result1.ops;
           res.status(201);
           res.send({
