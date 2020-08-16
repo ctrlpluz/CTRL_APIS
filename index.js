@@ -12,9 +12,15 @@ const {
   query
 } = require('express');
 const MongoClient = require('mongodb').MongoClient;
+const host="https://www.ctrlpluz.com"
 
 
 const app = express();
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*"); // update to match the domain you will make the request from
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
 app.use(body_parser.json())
 app.use(body_parser.raw())
 app.use(body_parser.urlencoded())
@@ -440,6 +446,7 @@ app.post('/createPost', async (req, res, next) => {
       json.share = 0;
 
 
+
       var result = await post_data.insertOne(json);
       // console.log(result)
 
@@ -455,7 +462,8 @@ app.post('/createPost', async (req, res, next) => {
         type: result.type,
         category: result.category,
         type: result.type,
-        published: result.published
+        published: result.published,
+        url: host+"/"+encodeURI(result.title)+result._id
       });
 
     } else next(400);
