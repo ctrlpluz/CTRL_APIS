@@ -161,14 +161,15 @@ app.post('/signUp', async (req, res, next) => {
 });
 
 app.post('/logIn', async (req, res, next) => {
-  
+  console.log(req.body.method)
   try {
-
     switch (req.body.method) {
-
+      
       case 'local': {
+        //console.log("local");
         if (typeof req.body.mail_id!= undefined && typeof req.body.password!= undefined && req.body.mail_id!= "" && req.body.password!= "") {
         const result = await user_data.findOne({ "mail_id": req.body.mail_id });
+        //console.log(result)
           if(result!=null){
             if (result.password == req.body.password) {
               res.status(200);
@@ -184,45 +185,50 @@ app.post('/logIn', async (req, res, next) => {
                 credential : encrypt(result._id),
                 user_id:  result._id
               });
-            }
-          }
-        }
-
+            }else res.status(401).send({
+              result:false,
+              message: "password didn't match"
+            });
+          }else next(404)
+        }else next(400);
         break;
       }
       case 'google': {
         if(typeof req.body.mail_id!= undefined && typeof req.body.mail_id!= ""){
             const check = await user_data.findOne({ "mail_id": req.body.mail_id });
-            const current_time = getMillis();
             if (check != null) {
+              var current_time=getMillis();
+             console.log("exist");
               var query = { "mail_id": req.body.mail_id };
               var values = {
                 $set: {
                   "first_name": req.body.first_name,
                   "last_name": req.body.last_name,
                   "avatar": req.body.avatar,
-                  "modified": current_time,
+                  "modified": current_time ,
                   "verified": true
                 }
               };
               const result = await user_data.updateOne(query, values);
-              console.log(result);
+              //console.log(result);
               if(result.modifiedCount==1){
+              console.log("modified==1");
+                
                 res.status(200);
                 res.send({
-                  result: true,
+                  result: true,                 
                   message: "login successful",
                   first_name: req.body.first_name,
                   last_name: req.body.last_name,
                   avatar: req.body.avatar,
-                  created: result.created,
+                  created: check.created,
                   modified: current_time,
-                  verified: result.verified,
-                  credential: encrypt(result._id),
-                  user_id: result._id
-                });
-              }
-            }else if(check == null){
+                  verified: true,
+                  credential: encrypt(check._id),
+                  user_id: check._id });
+               console.log(check)
+              }else next(500);
+            }else{
               var json = {};
               const current_time = getMillis();
               json.first_name = req.body.first_name;
@@ -259,7 +265,7 @@ app.post('/logIn', async (req, res, next) => {
       break;
     }
   } catch (error) {
-    next(500)
+    //next(500)
   }
 });
 
@@ -291,6 +297,7 @@ app.post('/getUserInfo', async (req, res, next) => {
 app.post('/setUserInfo', async (req, res, next) => {
   try {
     if (typeof req.body.credential != undefined) {
+      var current_time=getMillis();
       req.body.user_id = decrypt(req.body.credential);
       const result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
@@ -299,6 +306,7 @@ app.post('/setUserInfo', async (req, res, next) => {
           first_name: req.body.first_name || "",
           last_name: req.body.last_name || "",
           avatar: req.body.avatar || "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png",
+          modified: current_time
         }
       });
       if (result.matchedCount == 1) {
@@ -306,7 +314,8 @@ app.post('/setUserInfo', async (req, res, next) => {
           result: true,
           first_name: req.body.first_name,
           last_name: req.body.last_name,
-          avatar: req.body.avatar
+          avatar: req.body.avatar,
+          modified: current_time
         });
       } else next(401);
     } else next(400);
@@ -706,6 +715,7 @@ app.post('/getPost', async (req, res, next) => {
             'thumbnail': 1,
             'author': 1,
             'views': 1,
+            'post_content':1,
             'duration': 1,
             'summary': 1,
             'type': 1,
@@ -735,7 +745,7 @@ app.post('/getPost', async (req, res, next) => {
           category:  result.category,
           date_time:  result.date_time,
           share:  result.share,
-          url: encodeURI(host+"/"+categories[result.category].name+"/"+result._id),
+          url: encodeURI(host+"/"+categories[result.category].name+"/"+result.title+result._id),
           rating: avgRating(result.reviews),
           author:{
             first_name:result.author[0].first_name,
@@ -1122,7 +1132,8 @@ app.post('/postReview', async (req, res, next) => {
             "review": req.body.review,
             "rating": req.body.rating
           }
-        }
+        },
+        $set:{modified:getMillis()}
       };
       var result = await post_data.updateOne(query, values);
       if (result.modifiedCount == 1) {
@@ -1246,6 +1257,7 @@ app.post('/getReviews', async (req, res, next) => {
           _id: 0,
           'reviews.review': 1,
           'reviews.rating': 1,
+          'reviews.user_id': 1,
           'users.first_name': 1,
           'users.last_name': 1,
           'users.avatar': 1
@@ -1253,35 +1265,21 @@ app.post('/getReviews', async (req, res, next) => {
       }]
       var result = await post_data.aggregate(get_reviews_pipeline).toArray();
       result = result[0];
-      console.log(result);
+      //console.log(result);
       var arr = [];
 
       for (var i = 0; i < result.reviews.length; i++) {
         var obj = {};
+        obj.user_id = result.reviews[i].user_id;
         obj.first_name = result.users[i].first_name;
-        obj.first_name = result.users[i].first_name;
+        obj.last_name = result.users[i].last_name;
         obj.avatar = result.users[i].avatar;
         obj.review = result.reviews[i].review;
         obj.rating = result.reviews[i].rating;
         arr.push(obj);
       }
-      console.log(arr);
+      //console.log(arr);
       res.send(arr);
-      /*EXPECTED STRUCTURE OF Result
-       [ 
-         reviews : 
-         [
-           {review: " the review body", rating: 4.6 }
-          ],
-        users: 
-        [
-          {
-            first_name: "Manish", 
-            last_name: "goon",
-            avatar: "image.link"
-          }
-        ]
-      ]*/
 
     } else {
       next(400)
@@ -1292,6 +1290,13 @@ app.post('/getReviews', async (req, res, next) => {
     next(500)
   }
 
+});
+
+
+
+
+app.all('/test', async (req, res) => {
+  res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
 });
 
 app.all('/refreshLists', async (req, res, next) => {
