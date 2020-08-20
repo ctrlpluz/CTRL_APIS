@@ -1,4 +1,4 @@
-const t1 = getMillis();
+const t1 = new Date().getTime();
 const Cryptr = require('cryptr');
 
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
@@ -12,45 +12,34 @@ const {
 const {
   query
 } = require('express');
-const { urlencoded } = require('body-parser');
 const MongoClient = require('mongodb').MongoClient;
 const host="https://www.ctrlpluz.com"
 
 
 const app = express();
+/*
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*"); // update to match the domain you will make the request from
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+*/
 app.use(cors())
 app.use(body_parser.json())
 app.use(body_parser.raw())
-//app.use(body_parser.urlencoded())
+app.use(body_parser.urlencoded())
 const port = process.env.PORT || 3000;
 
 var client, db, user_data, post_data, reports, api_keys, others;
-var latest = [];
+var leatest = [];
 var recomanded = [];
 var categories = [];
 var lastRefreashed = 0;
-var refresh_takes_milis
 
 //var url = "mongodb+srv://manish:manish@cluster0.cqjkp.gcp.mongodb.net?retryWrites=true&w=majority";
-
 //var url = "mongodb://localhost:27017";
 var url= "mongodb+srv://manish:manish@cluster0.plkxv.mongodb.net?retryWrites=true&w=majority";
 
-
-/*
-var user_model={
-  first_name : "Name",
-  last_name : "Title",
-  mail_id : null,
-  password : null,
-  created : null,
-  modified : null,
-  avatar : "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png",
-  gender: 1,
-  verified : false,
-  fav_tags : []
-}
-*/
 const mailTransporter = nodemailer.createTransport({ 
   service: 'gmail', 
   auth: { 
@@ -59,39 +48,30 @@ const mailTransporter = nodemailer.createTransport({
   } 
 }); 
 
-MongoClient.connect(url, {useUnifiedTopology: true }, function (err, DBclient) { 
-  if (err) { console.error(err);  throw err; }
+MongoClient.connect(url, {
+  useUnifiedTopology: true
+}, function (err, DBclient) {
+  if (err) {
+    console.error(err);
+    throw err;
+  }
   client = DBclient;
 
   db = client.db("main");
 
   user_data = db.collection("user_data");
-  user_data.createIndex({mail_id:1},{unique:true});
   post_data = db.collection("post_data");
-  
-  
   reports = db.collection("reports");
   api_keys = db.collection("api_keys");
   others = db.collection("others");
-  others.createIndex({name:1},{unique:true});
-  /*
-  var obj=others.findOne({name:"categories"});
-  console.log(obj);
-  if(obj==null){
-    others.insertOne({name:"categories",value:[]})
-  }
-*/
+
   app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-   refreshList();
-    const t2 = getMillis();
-    console.log("\nServer Started at: "+ getTimeStamp()+"\nIt takes " + (t2 - t1) + " miliseconds to initilize...");
+    refreshList();
+    const t2 = new Date().getTime();
+    console.log("\nServer take : " + (t2 - t1) + " miliseconds to initilize...");
   });
 });
-
-
-
-
 app.post('/mailExist', async (req, res, next) => {
   try {
 
@@ -128,36 +108,48 @@ app.post('/signUp', async (req, res, next) => {
 
   try {
 
-    if (typeof req.body.mail_id!= undefined && typeof req.body.password!= undefined && req.body.mail_id!= "" && req.body.password!= "") {
+    if (req.body.mail_id!= "" && req.body.password!= "") {
       var json = {};
-      const current_time = getMillis();
-      json.first_name = req.body.first_name || "Name";
-      json.last_name = req.body.last_name || "Title";
+      json.first_name = req.body.first_name || "";
+      json.last_name = req.body.last_name || "";
       json.mail_id = req.body.mail_id || "";
       json.password = req.body.password || "";
-      json.created = current_time;
-      json.modified = current_time;
-      json.avatar = "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png";
+      json.date_time = new Date().getTime();
+      json.avatar = "";
       json.verified = false;
-  
-      var result = await user_data.insertOne(json);
-      //console.log(result)
-      if (result.insertedCount == 1) {
-        res.status(201);
-        res.send({
-          result: true,
-          message: "account successfully created"
-        });
-      } else next(500);
+      json.fav_tags = [];
+
+
+      const check = await user_data.findOne({
+        mail_id: req.body.mail_id
+      }, {
+        _id: 0,
+        mail_id: 1
+      });
+      //console.log(check);
+      if (check==null) {
+
+
+        var result = await user_data.insertOne(json);
+        //console.log(result)
+        if (result.insertedCount == 1) {
+          res.status(201);
+          res.send({
+            result: true,
+            message: "account successfully created"
+          });
+        } else next(500);
+      } else res.status(401).send({
+        result: false,
+        message: "account on this mail already exist"
+      });
+
     } else next(400);
   } catch (error) {
     console.error(error)
-    if(error.code==11000){
-      next(409)
-    }else{
     next(500)
-    }
   }
+
 });
 
 app.post('/logIn', async (req, res, next) => {
@@ -167,96 +159,92 @@ app.post('/logIn', async (req, res, next) => {
     switch (req.body.method) {
 
       case 'local': {
-        if (typeof req.body.mail_id!= undefined && typeof req.body.password!= undefined && req.body.mail_id!= "" && req.body.password!= "") {
-        const result = await user_data.findOne({ "mail_id": req.body.mail_id });
-          if(result!=null){
-            if (result.password == req.body.password) {
-              res.status(200);
-              res.send({
-                result : true,
-                message : "login successful",
-                first_name : result.first_name,
-                last_name : result.last_name,
-                avatar : result.avatar,
-                created : result.created,
-                modified : result.moddified,
-                verified : result.verified,
-                credential : encrypt(result._id),
-                user_id:  result._id
-              });
-            }
-          }
-        }
 
+        const result = await user_data.findOne({
+          "mail_id": req.body.mail_id
+        });
+
+        if (result.password == req.body.password) {
+          res.status(200);
+          res.send({
+            result: true,
+            message: "login successful",
+            first_name: result.first_name,
+            last_name: result.last_name,
+            avatar: result.avatar,
+            verified: result.verified,
+            credential: encrypt(result._id),
+            user_id: result._id
+          });
+        }
         break;
       }
       case 'google': {
-        if(typeof req.body.mail_id!= undefined && typeof req.body.mail_id!= ""){
-            const check = await user_data.findOne({ "mail_id": req.body.mail_id });
-            const current_time = getMillis();
-            if (check != null) {
-              var query = { "mail_id": req.body.mail_id };
-              var values = {
-                $set: {
-                  "first_name": req.body.first_name,
-                  "last_name": req.body.last_name,
-                  "avatar": req.body.avatar,
-                  "modified": current_time,
-                  "verified": true
-                }
-              };
-              const result = await user_data.updateOne(query, values);
-              console.log(result);
-              if(result.modifiedCount==1){
-                res.status(200);
-                res.send({
-                  result: true,
-                  message: "login successful",
-                  first_name: req.body.first_name,
-                  last_name: req.body.last_name,
-                  avatar: req.body.avatar,
-                  created: result.created,
-                  modified: current_time,
-                  verified: result.verified,
-                  credential: encrypt(result._id),
-                  user_id: result._id
-                });
-              }
-            }else if(check == null){
-              var json = {};
-              const current_time = getMillis();
-              json.first_name = req.body.first_name;
-              json.last_name = req.body.last_name;
-              json.mail_id = req.body.mail_id;
-              json.password = "";
-              json.created = current_time;
-              json.modified = current_time;
-              json.avatar = req.body.avatar;
-              json.verified = true;
-          
-              var result = await user_data.insertOne(json);
-              if(result.insertedCount==1){
-                result=result.ops;
-                res.status(201);
-                res.send({
-                  result: true,
-                  message: "Account created successfully",
-                  first_name: result.first_name,
-                  last_name: result.last_name,
-                  avatar: result.avatar,
-                  created: result.created,
-                  modified: result.modified,
-                  verified: result.verified,
-                  credential: encrypt(result._id),
-                  user_id: result._id
-                });
-              }else next(500);
+
+        const result = await user_data.findOne({
+          "mail_id": req.body.mail_id
+        });
+        console.log( req.body)
+
+        if (result != null) {
+          var query = {
+            "mail_id": req.body.mail_id
+          };
+          var values = {
+            $set: {
+              "first_name": req.body.first_name,
+              "last_name": req.body.last_name,
+              "avatar": req.body.avatar,
+              "verified": true
             }
-        }else next(400);
-        break;
+          };
+          const result = await user_data.updateOne(query, values);
+          //console.log(result);
+          if (result.matchedCount == 1) {
+            const result = await user_data.findOne({
+              "mail_id": req.body.mail_id
+            });
+            res.status(200);
+            res.send({
+              result: true,
+              message: "login successful",
+              first_name: result.first_name,
+              last_name: result.last_name,
+              avatar: result.avatar,
+              verified: result.verified,
+              credential: encrypt(result._id),
+              user_id: result._id
+            });
+          }
+        } else {
+
+          var json = {};
+          json.first_name = req.body.first_name;
+          json.last_name = req.body.last_name;
+          json.mail_id = req.body.mail_id;
+          json.password = null;
+          json.date_time = new Date().getTime();
+          json.avatar = req.body.avatar;
+          json.verified = true;
+          json.fav_tags = [];
+
+          const result1 = await user_data.insertOne(json);
+          //console.log(result1)
+          const result = result1.ops;
+          res.status(201);
+          res.send({
+            result: true,
+            message: "login successful",
+            first_name: result.first_name,
+            last_name: result.last_name,
+            avatar: result.avatar,
+            verified: result.verified,
+            credential: encrypt(result._id),
+            user_id: result._id
+          });
+        }
+
       }
-      default: next(400);
-      break;
     }
   } catch (error) {
     next(500)
@@ -265,29 +253,43 @@ app.post('/logIn', async (req, res, next) => {
 
 app.post('/getUserInfo', async (req, res, next) => {
   try {
-    if (typeof req.body.credential != undefined && req.body.credential != null) {
+    if (typeof req.body.credential != undefined) {
       req.body.user_id = decrypt(req.body.credential);
-      var result = await user_data.findOne({_id:ObjectId(req.body.user_id)});
-      if (result.first_name != null) {
+      const user_info_pipeline = [{
+        $match: {
+          _id: new ObjectId(req.body.user_id)
+        }
+      }, {
+        $project: {
+          _id: 0,
+          first_name: 1,
+          last_name: 1,
+          avatar: 1
+        }
+      }]
+      var result = await user_data.aggregate(user_info_pipeline).toArray();
+      result = result[0];
+      if (typeof result.first_name != undefined) {
         res.status(200);
         res.send({
           result: true,
           first_name: result.first_name,
           last_name: result.last_name,
-          mail_id: result.mail_id,
-          avatar: result.avatar,
-          created: result.created,
-          modified: result.modified
+          avatar: result.avatar
         });
-      } else if (result.first_name == null) next(404);
+      } else {
+        next(404)
+      }
+
     } else next(400);
-    } catch (error) {
-      console.error(error);
-      next(500);
+
+  } catch (error) {
+    console.error(error);
+    next(500);
   }
+
 });
 
-// NOT YET INSPECTED
 app.post('/setUserInfo', async (req, res, next) => {
   try {
     if (typeof req.body.credential != undefined) {
@@ -296,9 +298,9 @@ app.post('/setUserInfo', async (req, res, next) => {
         _id: ObjectId(req.body.user_id)
       }, {
         $set: {
-          first_name: req.body.first_name || "",
-          last_name: req.body.last_name || "",
-          avatar: req.body.avatar || "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png",
+          first_name: req.body.first_name || "unnamed",
+          last_name: req.body.last_name || "unnamed",
+          avatar: req.body.avatar || undefined,
         }
       });
       if (result.matchedCount == 1) {
@@ -324,12 +326,14 @@ app.post('/setUserInfo', async (req, res, next) => {
 
 
 
+
+
 //THIS TWO ROUT NEED NODEMAILER
 app.post('/mailVerification', async (req, res, next) => {
   try {
     if (req.body.mail_id!= "" && typeof req.body.mail_id!= undefined && req.body.credential!= "" && typeof req.body.credential!= undefined){
       req.body.user_id = decrypt(req.body.credential);
-      const result= await api_keys.insertOne({user_id: ObjectId(req.body.user_id), mail_id: req.body.mail_id, timestamp: getMillis()});
+      const result= await api_keys.insertOne({user_id: ObjectId(req.body.user_id), mail_id: req.body.mail_id, timestamp: new Date().getTime()});
       //console.log(result);
       if(result.insertedCount==1){
 
@@ -423,9 +427,8 @@ app.post('/updatePassword', async (req, res) => {
 // need to handel thumbnail and duration &  total number of post in user_data 
 app.post('/createPost', async (req, res, next) => {
   try {
-    
     if (typeof req.body.credential != undefined) {
-      const current_time= getMillis();
+
       req.body.user_id = decrypt(req.body.credential);
 
       var json = {};
@@ -440,47 +443,46 @@ app.post('/createPost', async (req, res, next) => {
       json.thumbnail = req.body.thumbnail;
       json.category = req.body.category;
       json.word_count = req.body.word_count;
-      json.created = current_time;
-      json.modified = current_time;
-      json.duration = (req.body.word_count/100) || 0;  //80 words per minuite is normal speed I take as 100 word per min
+      json.date_time = new Date().getTime();
+      json.duration = (req.body.word_count/80) || 0;  //80 words per minuite is normal speed
       json.views = 0;
       json.reviews = [];
       json.share = 0;
 
+
+
       var result = await post_data.insertOne(json);
-      if(result.insertedCount==1){
-        console.log(result);
-        result=result.ops
-        res.status(201)
-        res.send({
-          result: true,
-          message: "post has successfully created",
-          post_id: result._id,
-          title: result.title,
-          summery: result.summery,
-          tags: result.tags,
-          thumbnail: result.thumbnail,
-          type: result.type,
-          category: result.category,
-          type: result.type,
-          published: result.published,
-          created: result.created,
-          modified: result.modified,
-          url: encodeURI(host+"/"+categories[result.category].name+"/"+result.title+result._id)
-        });
-      } else next(500)
+      // console.log(result)
+
+      res.status(201)
+      res.send({
+        result: true,
+        message: "post has successfully created",
+        post_id: result._id,
+        title: result.title,
+        summery: result.summery,
+        tags: result.tags,
+        thumbnail: result.thumbnail,
+        type: result.type,
+        category: result.category,
+        type: result.type,
+        published: result.published,
+        url: host+"/"+encodeURI(result.title)+result._id
+      });
+
     } else next(400);
+
   } catch (error) {
     console.error(error);
     next(500)
   }
+
 });
 
-// need to handel thumbnail and duration &  total number of post in user_data
+// need to handel thumbnail and duration &  total number of post in user_data 
 app.post('/updatePost', async (req, res, next) => {
   try {
     if (typeof req.body.credential != undefined && typeof req.body.post_id != undefined) {
-      const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
       var query = {
         _id: ObjectId(req.body.post_id),
@@ -496,35 +498,21 @@ app.post('/updatePost', async (req, res, next) => {
           tags: req.body.tags,
           thumbnail: req.body.thumbnail,
           category: req.body.category,
-          published: req.body.published,
-          modified: current_time,
           word_count: req.body.word_count,
-          duration: (req.body.word_count / 100)
+          duration: (req.body.word_count / 80) || 0
         }
       }
 
 
       var result = await post_data.updateOne(query, newValues);
-     // console.log(result)
+      console.log(result)
       if (result.matchedCount == 1) {
+
+
         res.status(201)
         res.send({
           result: true,
-          message: "post has successfully updated",
-          post_id:req.body.post_id,
-          title: req.body.title,
-          post_content: req.body.post_content,
-          type: req.body.type,
-          published: req.body.published,
-          summary: req.body.summary,
-          tags: req.body.tags,
-          thumbnail: req.body.thumbnail,
-          category: req.body.category,
-          published: req.body.published,
-          modified: current_time,
-          word_count: req.body.word_count,
-          duration: (req.body.word_count / 100),
-          url: encodeURI(host+"/"+categories[req.body.category].name+"/"+req.body.title+req.body.post_id)
+          message: "post has successfully updated"
         });
       } else {
         next(401);
@@ -537,7 +525,7 @@ app.post('/updatePost', async (req, res, next) => {
     next(500)
   }
 });
-// need to handel thumbnail and duration &  total number of post in user_data
+
 app.post('/removePost', async (req, res, next) => {
   try {
     if (typeof req.body.credential != undefined && typeof req.body.post_id != undefined) {
@@ -575,14 +563,14 @@ app.post('/removePost', async (req, res, next) => {
 
 app.post('/getRecomanded', async (req, res, next) => {
   try {
-    if ((getMillis() - lastRefreashed) > 3 * 60 * 60 * 1000) {
+    if ((new Date().getTime() - lastRefreashed) > 3 * 60 * 60 * 1000) {
       refreshList();
-      //console.log('refreshList')
+      console.log('refreshList')
     }
     if (typeof req.body.skip == "number" && typeof req.body.limit == "number") {
 
       var array = [];
-      //console.log(recomanded)
+      console.log(recomanded)
       for (var i = req.body.skip; i < req.body.skip + req.body.limit; i++) {
         if (recomanded[i] == null) break;
         array.push(recomanded[i]);
@@ -591,6 +579,7 @@ app.post('/getRecomanded', async (req, res, next) => {
       res.status(200);
       res.send(array);
     } else next(400);
+
   } catch (error) {
     console.error(error);
     next(500)
@@ -600,15 +589,15 @@ app.post('/getRecomanded', async (req, res, next) => {
 
 app.post('/getLatest', async (req, res) => {
   try {
-    if ((getMillis() - lastRefreashed) > 3 * 60 * 60 * 1000) {
+    if ((new Date().getTime() - lastRefreashed) > 3 * 60 * 60 * 1000) {
       refreshList();
     }
     if (typeof req.body.skip == "number" && typeof req.body.limit == "number") {
 
       var array = [];
       for (var i = req.body.skip; i < req.body.skip + req.body.limit; i++) {
-        if (latest[i] == null) break;
-        array.push(latest[i]);
+        if (leatest[i] == null) break;
+        array.push(leatest[i]);
         if (i > 500) break;
       }
       res.status(200);
@@ -620,7 +609,7 @@ app.post('/getLatest', async (req, res) => {
     next(500)
   }
 });
-//HANDEL URL  url: host+"/"+categories[result.category]+"/"+result.title+result._id
+
 app.post('/usersPosts', async (req, res, next) => {
   try {
     if (typeof req.body.user_id != undefined) {
@@ -638,21 +627,14 @@ app.post('/usersPosts', async (req, res, next) => {
           'duration': 1,
           'type': 1,
           'category': 1,
-          'created': 1,
-          'modified': 1,
-          'share':1,
-          'reviews':1
+          'date_time': 1,
+          'share':1
         }
       }];
       var result = await post_data.aggregate(usersPost_pipelines).toArray();
-      //console.log(result);
+      console.log(result)
+
       if (result.length != 0) {
-        for(var i=0; i<result.length;i++){
-          var object=result[i];
-          object.rating=avgRating(object.reviews);
-          delete object.reviews;
-          result[i]=object;
-        }
         res.send({
           result: true,
           array: result
@@ -660,13 +642,17 @@ app.post('/usersPosts', async (req, res, next) => {
       } else {
         next(404);
       }
+
     } else {
       next(400)
     }
+
+
   } catch (error) {
     console.error(error);
     next(500)
   }
+
 });
 
 app.post('/getPost', async (req, res, next) => {
@@ -681,51 +667,18 @@ app.post('/getPost', async (req, res, next) => {
           'duration': 1,
           'type': 1,
           'category': 1,
-          'created': 1,
-          'modified': 1,
+          'date_time': 1,
           'share':1,
-          'post_content':1,
-          'reviews':1
+          'post_content':1
         }
-        const get_post_query = [{
-          '$match': {
-            '_id': ObjectId(req.body.post_id)
-          }
-        }, {
-          '$limit': 1
-        }, {
-          '$lookup': {
-            'from': 'user_data',
-            'localField': 'user_id',
-            'foreignField': '_id',
-            'as': 'author'
-          }
-        }, {
-          '$project': {
-            'title': 1,
-            'thumbnail': 1,
-            'author': 1,
-            'views': 1,
-            'duration': 1,
-            'summary': 1,
-            'type': 1,
-            'category': 1,
-            'created': 1,
-            'modified': 1,
-            'share':1,
-            'reviews':1
-          }
-        }];
-      var result = await post_data.aggregate(get_post_query).toArray();
-      //var result = await post_data.findOne({_id: ObjectId(req.body.post_id)}, project);
-      result=result[0];
+
+      var result = await post_data.findOne({_id: ObjectId(req.body.post_id)}, project);
       //console.log(result)
 
       if (result != null) {
         res.send({
           result: true,
           title: result.title,
-          post_id: result._id,
           thumbnail: result.thumbnail,
           views: result.views,
           summary: result.summary,
@@ -734,15 +687,7 @@ app.post('/getPost', async (req, res, next) => {
           type: result.type,
           category:  result.category,
           date_time:  result.date_time,
-          share:  result.share,
-          url: encodeURI(host+"/"+categories[result.category].name+"/"+result._id),
-          rating: avgRating(result.reviews),
-          author:{
-            first_name:result.author[0].first_name,
-            last_name:result.author[0].last_name,
-            avatar:result.author[0].avatar,
-            user_id:result.author[0]._id
-          }
+          share:  result.share
         });
       } else {
         next(404);
@@ -751,6 +696,8 @@ app.post('/getPost', async (req, res, next) => {
     } else {
       next(400)
     }
+
+
   } catch (error) {
     console.error(error);
     next(500)
@@ -780,16 +727,11 @@ app.post('/getPostContent', async (req, res, next) => {
 
 });
 
-
-
-
-
-
-app.post('/setView', async (req, res, next) => {
+app.all('/setView', async (req, res, next) => {
   try {
     if (typeof req.body.post_id != undefined){
       const result = await post_data.updateOne({_id: ObjectId(req.body.post_id)},{
-        $inc: {views:1, modified:getMillis}
+        $inc: {views:1}
       });
       if(result.matchedCount==1){
         res.status(200).send({
@@ -806,11 +748,11 @@ app.post('/setView', async (req, res, next) => {
 
 });
 
-app.post('/setShare', async (req, res, next) => {
+app.all('/setShare', async (req, res, next) => {
   try {
     if (typeof req.body.post_id != undefined){
       const result = await post_data.updateOne({_id: ObjectId(req.body.post_id)},{
-        $inc: {share:1, modified:getMillis}
+        $inc: {share:1}
       });
       if(result.matchedCount==1){
         res.status(200).send({
@@ -831,78 +773,8 @@ app.post('/setShare', async (req, res, next) => {
 
 
 
-app.post('/updateCategories', async (req, res, next) => {
-  try {
-      switch(req.body.method){
-        case 'insert':{
-          var result= await others.updateOne({name:"categories"},{
-            $push:{
-              value:{
-                name:req.body.name,
-                thumbnail:req.body.thumbnail,
-                value:categories.length+1,
-              }
-            }
-        },{$upsert:true});
-        //console.log(result);
-        if(result.modifiedCount==1){
-          res.status(200)
-          res.send({
-            result:true,
-            message:req.body.name+" is added to categories with a value "+(categories.length+1)
-          });
-          refreshList();
-        }
-          break;
-        }        
-        case 'update':{
-          var result=await others.updateOne({'name' :"categories",'value.value': req.body.value},{
-            $set:{
-              value:{
-                name:req.body.name,
-                thumbnail:req.body.thumbnail
-              }
-            }
-        });//console.log(result);
-        if(result.modifiedCount==1){
-          res.status(200)
-          res.send({
-            result:true,
-            message:req.body.name+" is updated to categories at value "+req.body.value
-          });
-          refreshList();
-        }
-          break;
-        }        
-        case 'remove':{
-          var result=await others.updateOne({name:"categories"},{
-            $pull:{
-              value:{
-                value:req.body.value,
-              }
-            }
-        });        
-        if(result.modifiedCount==1){
-          res.status(200)
-          res.send({
-            result:true,
-            message:req.body.name+" is removed from categories"
-          });
-          refreshList();
-        }
-          break;
-        }
-      }
-
-  } catch (error) {
-    console.error(error);
-    next(500)
-  }
-
-});
 
 
-//Review needs to add
 app.all('/getCategories', async (req, res, next) => {
   try {
     res.status(200).send(categories);
@@ -914,64 +786,29 @@ app.all('/getCategories', async (req, res, next) => {
 
 });
 
-app.post('/getCategoryContents', async (req, res,next) => {
+app.post('/getCategoryContents', async (req, res) => {
   try {
     if (typeof req.body.category != undefined) {
-      var category_pipeline = [{
-        '$match': {
-          'category': req.body.category,
-          'published': true
-        }
-      },{
-        '$sort': {
-          'views': -1
+      category_pipeline = [{
+        $match: {
+          category: req.body.category,
+          published: true
         }
       }, {
-        '$limit': 200
-      }, {
-        '$lookup': {
-          'from': 'user_data',
-          'localField': 'user_id',
-          'foreignField': '_id',
-          'as': 'author'
-        }
-      }, {
-        '$project': {
+        $project: {
           'title': 1,
           'thumbnail': 1,
-          'author': 1,
           'views': 1,
           'duration': 1,
           'summary': 1,
           'type': 1,
           'category': 1,
-          'created': 1,
-          'modified': 1,
-          'share':1
+          'date_time': 1
         }
-      } ];
-
-      
+      }];
       var result = await post_data.aggregate(category_pipeline).toArray();
       //console.log(result);
       if (result.length != 0) {
-        for (var i = 0; i < result.length; i++) {
-          let object = result[i];
-          object.url =encodeURI( host+"/"+categories[object.category].name+"/"+object.title+object._id);
-          object.post_id = object._id;
-          let temp = object.author[0];
-          delete object._id;
-         // console.log(object)
-          let author = {}
-          author.first_name = temp.first_name;
-          author.last_name = temp.last_name;
-          author.avatar = temp.avatar;
-          author.user_id = temp._id;
-          object.author = author;
-    
-          result[i] = object;
-    
-        }
         res.status(200);
         res.send(result);
       } else next(404);
@@ -1299,10 +1136,10 @@ app.all('/refreshLists', async (req, res, next) => {
     refreshList();
     res.status(200).send({
       result: true,
-      message: "All the caches are refreshed at: "+getTimeStamp()+" Refresh takes: "+refresh_takes_milis+" millis to complete..."
+      message: "All the lists are refreshed just now."
     })
   } catch (error) {
-    next(500);
+
   }
 
 });
@@ -1310,28 +1147,72 @@ app.all('/refreshLists', async (req, res, next) => {
 
 
 
+app.use((err, req, res, next) => {
+
+  switch (err) {
+    case 400: { //BAD REQUEST
+      console.error({
+        error_code: err,
+        path: req.path,
+        headers: req.headers,
+        body: req.body
+      });
+      res.status(err);
+      res.send({
+        result: false,
+        message: "It was a bad request, maybe you had provided wrong parameters or fields."
+      });
+      break;
+    }
+    case 401: { //UNAUTHORIZE
+      console.error({
+        error_code: err,
+        path: req.path,
+        headers: req.headers,
+        body: req.body
+      });
+      res.status(err);
+      res.send({
+        result: false,
+        message: "It was a UNAUTHORIZE request, maybe you provided the wrong credential key"
+      });
+      break;
+    }
+    case 404: { //NOT FOUND
+      console.error({
+        error_code: err,
+        path: req.path,
+        headers: req.headers,
+        body: req.body
+      });
+      res.status(err);
+      res.send({
+        result: false,
+        message: "It was a NOT FOUND error, data you are looking for is not found in the database."
+      });
+      break;
+    }
+
+    case 500: { //INTERNAL SERVER ERROR
+      console.error({
+        error_code: err,
+        path: req.path,
+        headers: req.headers,
+        body: req.body
+      });
+      res.status(err);
+      res.send({
+        result: false,
+        message: "It looks like an error occurred in server contact with backend developer."
+      });
+      break;
+    }
+  }
+});
 
 
 async function refreshList() {
-  var start= getMillis();
   try {
-    var catagories_pipeline = [{
-      $match: {
-        name: "categories"
-      }
-    }, {
-      $project: {
-        _id: 0,
-        value: 1
-      }
-    }
-
-  ];
-  categories = await others.aggregate(catagories_pipeline).toArray();
-  if(categories.length!=0){
-  categories = categories[0].value;
-  //console.log(categories);
-  }
 
     const recomanded_query = [{
       '$match': {
@@ -1360,20 +1241,14 @@ async function refreshList() {
         'summary': 1,
         'type': 1,
         'category': 1,
-        'created': 1,
-        'modified': 1,
+        'date_time': 1,
         'share':1
       }
     }];
     recomanded = await post_data.aggregate(recomanded_query).toArray();
-    if(recomanded.length!=0){
     for (var i = 0; i < recomanded.length; i++) {
       let object = recomanded[i];
-      object.url =encodeURI( host+"/"+categories[object.category].name+"/"+object.title+object._id);
-      object.post_id = object._id;
       let temp = object.author[0];
-      delete object._id;
-     // console.log(object)
       let author = {}
       author.first_name = temp.first_name;
       author.last_name = temp.last_name;
@@ -1383,8 +1258,8 @@ async function refreshList() {
 
       recomanded[i] = object;
 
-    }}
-    const latest_query = [{
+    }
+    const leatest_query = [{
       '$match': {
         'published': true
       }
@@ -1407,21 +1282,13 @@ async function refreshList() {
         'summary': 1,
         'type': 1,
         'category': 1,
-        'created': 1,
-        'modified': 1,
-        'share':1,
-        'reviews':1
+        'date_time': 1,
+        'share':1
       }
     }];
-    latest = await post_data.aggregate(latest_query).toArray();
-    if(latest.length!=0){
-    for (var i = 0; i < latest.length; i++) {
-      let object = latest[i];     
-      object.url = encodeURI(host+"/"+categories[object.category].name+"/"+object.title+object._id)
-      object.post_id = object._id
-      delete object._id;
-      object.rating = avgRating(object.reviews);
-      delete object.reviews;
+    leatest = await post_data.aggregate(leatest_query).toArray();
+    for (var i = 0; i < leatest.length; i++) {
+      let object = leatest[i];
       let temp = object.author[0];
       let author = {}
       author.first_name = temp.first_name;
@@ -1429,43 +1296,35 @@ async function refreshList() {
       author.avatar = temp.avatar;
       author.user_id = temp._id;
       object.author = author;
-      latest[i] = object;
-    }}
+      leatest[i] = object;
+
+    }
+
+    var catagories_pipeline = [{
+        $match: {
+          name: "categories"
+        }
+      }, {
+        $project: {
+          _id: 0,
+          value: 1
+        }
+      }
+
+    ];
+    categories = await others.aggregate(catagories_pipeline).toArray();
+    categories = categories[0].value
+
+    //console.log(categories);
 
 
-
-
-
-
-    lastRefreashed = getMillis();
-    refresh_takes_milis=lastRefreashed-start;
-    console.log("lists are refreashed! at: " + getTimeStamp()+"\n"+"It takes: "+refresh_takes_milis+" millis");
+    lastRefreashed = new Date().getTime();
+    console.log("lists are refreashed! at: " + lastRefreashed);
     //console.log('Recomanded',recomanded);
-    //console.log('latest',latest);
+    //console.log('Leatest',leatest);
   } catch (error) {
     console.error(error)
   }
-}
-
-function getTimeStamp(){
-  var date=new Date();
-  var timestamp = date.getDate()+"."+date.getMonth()+"."+date.getFullYear()+"-"+ date.getHours()+":"+date.getMinutes()+":"+date.getSeconds()+"."+date.getMilliseconds();
-  return timestamp;
-}
-
-function getMillis(){
-  return new Date().getTime();
-}
-
-function avgRating(reviews){
-  var rating=0;
-  if(reviews.length!=0){
-  for(var i=0;i<reviews.length;i++){
-    rating=rating+reviews[i].rating;
-  }
-  rating=rating/reviews.length;
-}
-  return rating;
 }
 
 function dataURLtoBlob(dataurl) {
@@ -1489,91 +1348,3 @@ function encrypt(value) {
 function decrypt(value) {
   return cryptr.decrypt(value);
 }
-
-//ERROR HANDALER
-app.use((err, req, res, next) => {
-
-  switch (err) {
-    case 400: { //BAD REQUEST
-      console.error({
-        error_code: err,
-        path: req.path,
-        headers: req.headers,
-        body: req.body,
-        message: "It was a bad request, maybe you had provided wrong parameters or fields."
-      });
-      res.status(err);
-      res.send({
-        result: false,
-        message: "It was a bad request, maybe you had provided wrong parameters or fields."
-      });
-      break;
-    }
-    case 401: { //UNAUTHORIZE
-      console.error({
-        error_code: err,
-        path: req.path,
-        headers: req.headers,
-        body: req.body,
-        message: "It was a UNAUTHORIZE request, maybe you provided the wrong credential key"
-
-      });
-      res.status(err);
-      res.send({
-        result: false,
-        message: "It was a UNAUTHORIZE request, maybe you provided the wrong credential key"
-      });
-      break;
-    }
-    case 404: { //NOT FOUND
-      console.error({
-        error_code: err,
-        path: req.path,
-        headers: req.headers,
-        body: req.body,
-        message: "It was a NOT FOUND error, data you are looking for is not found in the database."
-
-      });
-      res.status(err);
-      res.send({
-        result: false,
-        message: "It was a NOT FOUND error, data you are looking for is not found in the database."
-      });
-      break;
-    }
-
-    case 409: { //NOT FOUND
-      console.error({
-        error_code: err,
-        path: req.path,
-        headers: req.headers,
-        body: req.body,
-        message: "Resource already exist in database."
-
-      });
-      res.status(err);
-      res.send({
-        result: false,
-        message: "Resource already exist in database."
-      });
-      break;
-    }
-
-    case 500: { //INTERNAL SERVER ERROR
-      console.error({
-        error_code: err,
-        path: req.path,
-        headers: req.headers,
-        body: req.body,
-        message: "It looks like an error occurred in server contact with backend developer."
-
-      });
-      res.status(err);
-      res.send({
-        result: false,
-        message: "It looks like an error occurred in server contact with backend developer."
-      });
-      break;
-    }
-  }
-});
