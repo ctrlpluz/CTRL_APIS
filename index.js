@@ -1,5 +1,6 @@
 const t1 = getMillis();
 const Cryptr = require('cryptr');
+const shuffle = require('shuffle-array')
 
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
@@ -597,10 +598,10 @@ app.post('/getRecomanded', async (req, res, next) => {
       for (var i = req.body.skip; i < req.body.skip + req.body.limit; i++) {
         if (recomanded[i] == null) break;
         array.push(recomanded[i]);
-        if (i > 200) break;
+        if (i > 100) break;
       }
       res.status(200);
-      res.send(array);
+      res.send(shuffle(array, { 'copy': true }));
     } else next(400);
   } catch (error) {
     console.error(error);
@@ -623,7 +624,7 @@ app.post('/getLatest', async (req, res) => {
         if (i > 500) break;
       }
       res.status(200);
-      res.send(array);
+      res.send(shuffle(array, { 'copy': true }));
     } else next(400);
 
   } catch (error) {
@@ -917,7 +918,7 @@ app.post('/updateCategories', async (req, res, next) => {
 //Review needs to add
 app.all('/getCategories', async (req, res, next) => {
   try {
-    res.status(200).send(categories);
+    res.status(200).send(shuffle(categories, { 'copy': true }));
 
   } catch (error) {
     console.error(error);
@@ -1347,7 +1348,7 @@ async function refreshList() {
         'views': -1
       }
     }, {
-      '$limit': 200
+      '$limit': 100
     }, {
       '$lookup': {
         'from': 'user_data',
@@ -1395,6 +1396,10 @@ async function refreshList() {
       }
     }, {
       '$limit': 500
+    },{
+      '$sort': {
+        'created': -1
+      }
     }, {
       '$lookup': {
         'from': 'user_data',
