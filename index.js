@@ -428,7 +428,6 @@ app.post('/updatePassword', async (req, res) => {
 
 
 
-
 // need to handel thumbnail and duration &  total number of post in user_data 
 app.post('/createPost', async (req, res, next) => {
   try {
@@ -457,9 +456,10 @@ app.post('/createPost', async (req, res, next) => {
       json.share = 0;
 
       var result = await post_data.insertOne(json);
+      //console.log(result);
       if(result.insertedCount==1){
-        console.log(result);
-        result=result.ops
+        //console.log(result);
+        result=result.ops[0]
         res.status(201)
         res.send({
           result: true,
@@ -477,6 +477,7 @@ app.post('/createPost', async (req, res, next) => {
           modified: result.modified,
           url: encodeURI(host+"/"+categories[result.category].name+"/"+result.title+result._id)
         });
+
       } else next(500)
     } else next(400);
   } catch (error) {
@@ -546,6 +547,7 @@ app.post('/updatePost', async (req, res, next) => {
     next(500)
   }
 });
+
 // need to handel thumbnail and duration &  total number of post in user_data
 app.post('/removePost', async (req, res, next) => {
   try {
@@ -799,7 +801,7 @@ app.post('/setView', async (req, res, next) => {
   try {
     if (typeof req.body.post_id != undefined){
       const result = await post_data.updateOne({_id: ObjectId(req.body.post_id)},{
-        $inc: {views:1, modified:getMillis}
+        $inc: {views:1}
       });
       if(result.matchedCount==1){
         res.status(200).send({
@@ -820,7 +822,7 @@ app.post('/setShare', async (req, res, next) => {
   try {
     if (typeof req.body.post_id != undefined){
       const result = await post_data.updateOne({_id: ObjectId(req.body.post_id)},{
-        $inc: {share:1, modified:getMillis}
+        $inc: {share:1}
       });
       if(result.matchedCount==1){
         res.status(200).send({
@@ -1133,7 +1135,7 @@ app.post('/postReview', async (req, res, next) => {
             "rating": req.body.rating
           }
         },
-        $set:{modified:getMillis()}
+        $set:{ratedAt:getMillis()}
       };
       var result = await post_data.updateOne(query, values);
       if (result.modifiedCount == 1) {
@@ -1235,8 +1237,6 @@ app.post('/removeReview', async (req, res, next) => {
   }
 
 });
-
-
 
 app.post('/getReviews', async (req, res, next) => {
   try {
