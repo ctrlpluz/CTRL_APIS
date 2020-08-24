@@ -1,28 +1,23 @@
 const t1 = getMillis();
 const Cryptr = require('cryptr');
-const shuffle = require('shuffle-array')
+const shuffle = require('shuffle-array');
 
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
 const express = require('express');
 const cors = require('cors')
 const body_parser = require('body-parser');
-const {
-  ObjectId
-} = require('mongodb');
-const {
-  query
-} = require('express');
-const { urlencoded } = require('body-parser');
+const { ObjectId } = require('mongodb');
+
 const MongoClient = require('mongodb').MongoClient;
-const host="https://www.ctrlpluz.com"
+const host="https://www.ctrlpluz.com";
 
 
 const app = express();
-app.use(cors())
-app.use(body_parser.json())
-app.use(body_parser.raw())
-//app.use(body_parser.urlencoded())
+app.use(cors());
+app.use(body_parser.json());
+app.use(body_parser.raw());
+//app.use(body_parser.urlencoded());
 const port = process.env.PORT || 3000;
 
 var client, db, user_data, post_data, reports, api_keys, others;
@@ -36,7 +31,6 @@ var refresh_takes_milis
 
 //var url = "mongodb://localhost:27017";
 var url= "mongodb+srv://manish:manish@cluster0.plkxv.mongodb.net?retryWrites=true&w=majority";
-
 
 /*
 var user_model={
@@ -52,6 +46,19 @@ var user_model={
   fav_tags : []
 }
 */
+//FIREBASE ADMIN
+var t3=getMillis();
+const admin = require("firebase-admin");
+var serviceAccount = require("./serviceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: "ctrl-pluz.appspot.com"
+})
+console.log("Firebase take: "+(getMillis()-t3)+" millis to initilize...");
+
+
+
 const mailTransporter = nodemailer.createTransport({ 
   service: 'gmail', 
   auth: { 
@@ -86,9 +93,12 @@ MongoClient.connect(url, {useUnifiedTopology: true }, function (err, DBclient) {
     console.log(`Server running on http://localhost:${port}/`);
    refreshList();
     const t2 = getMillis();
-    console.log("\nServer Started at: "+ getTimeStamp()+"\nIt takes " + (t2 - t1) + " miliseconds to initilize...");
+    console.log("Server Started at: "+ getTimeStamp()+"\nIt takes " + (t2 - t1) + " miliseconds to initilize...");
   });
 });
+
+
+
 
 
 
@@ -433,15 +443,17 @@ app.post('/updatePassword', async (req, res) => {
 app.post('/createPost', async (req, res, next) => {
   try {
     
-    if (typeof req.body.credential != undefined) {
+    if (typeof req.body.credential != undefined && req.body.credential != "") {
       const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
+
+      var link=await storageUpload(req.body.post_content || "",current_time,"post");
 
       var json = {};
 
       json.title = req.body.title;
       json.user_id = new ObjectId(req.body.user_id);
-      json.post_content = req.body.post_content;
+      json.post_content = link;
       json.tags = req.body.tags;
       json.type = req.body.type;
       json.published = req.body.published;
@@ -451,7 +463,7 @@ app.post('/createPost', async (req, res, next) => {
       json.word_count = req.body.word_count;
       json.created = current_time;
       json.modified = current_time;
-      json.duration = (req.body.word_count/100) || 0;  //80 words per minuite is normal speed I take as 100 word per min
+      json.duration = parseInt((req.body.word_count/100) || 0,10);  //80 words per minuite is normal speed I take as 100 word per min
       json.views = 0;
       json.reviews = [];
       json.share = 0;
@@ -490,17 +502,24 @@ app.post('/createPost', async (req, res, next) => {
 // need to handel thumbnail and duration &  total number of post in user_data
 app.post('/updatePost', async (req, res, next) => {
   try {
-    if (typeof req.body.credential != undefined && typeof req.body.post_id != undefined) {
+    if (typeof req.body.credential != undefined && req.body.post_id != "") {
       const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
+      var obj= await post_data.findOne({ _id: ObjectId(req.body.post_id)});
+      if (obj!=null && obj.user_id==req.body.user_id){
+
+      var link= await storageUpload(req.body.post_content,obj.created, 'post');
+      
       var query = {
         _id: ObjectId(req.body.post_id),
         user_id: ObjectId(req.body.user_id)
       };
+      
+
       var newValues = {
         $set: {
           title: req.body.title,
-          post_content: req.body.post_content,
+          post_content: link,
           type: req.body.type,
           published: req.body.published,
           summary: req.body.summary,
@@ -510,7 +529,7 @@ app.post('/updatePost', async (req, res, next) => {
           published: req.body.published,
           modified: current_time,
           word_count: req.body.word_count,
-          duration: (req.body.word_count / 100)
+          duration: parseInt((req.body.word_count/100) || 0,10)
         }
       }
 
@@ -524,7 +543,7 @@ app.post('/updatePost', async (req, res, next) => {
           message: "post has successfully updated",
           post_id:req.body.post_id,
           title: req.body.title,
-          post_content: req.body.post_content,
+          post_content: link,
           type: req.body.type,
           published: req.body.published,
           summary: req.body.summary,
@@ -537,6 +556,7 @@ app.post('/updatePost', async (req, res, next) => {
           duration: (req.body.word_count / 100),
           url: encodeURI(host+"/"+categories[req.body.category].name+"/"+req.body.title+req.body.post_id)
         });
+      }
       } else {
         next(401);
       }
@@ -559,6 +579,10 @@ app.post('/removePost', async (req, res, next) => {
         _id: ObjectId(req.body.post_id),
         user_id: ObjectId(req.body.user_id)
       };
+      var obj=await post_data.findOne({_id: ObjectId(req.body.post_id)});
+      if(obj!=null && obj.user_id==req.body.user_id){
+          await storageRemove(obj.created,'post');
+
       var result = await post_data.deleteOne(query);
 
       if (result.deletedCount == 1) {
@@ -567,6 +591,7 @@ app.post('/removePost', async (req, res, next) => {
           result: true,
           message: "post has deleted successfully"
         });
+      }
       } else next(401)
     } else next(400);
 
@@ -575,11 +600,6 @@ app.post('/removePost', async (req, res, next) => {
     next(500)
   }
 });
-
-
-
-
-
 
 
 
@@ -796,8 +816,6 @@ app.post('/getPostContent', async (req, res, next) => {
 
 
 
-
-
 app.post('/setView', async (req, res, next) => {
   try {
     if (typeof req.body.post_id != undefined){
@@ -955,6 +973,7 @@ app.post('/getCategoryContents', async (req, res,next) => {
           'author': 1,
           'views': 1,
           'duration': 1,
+          'post_content':1,
           'summary': 1,
           'type': 1,
           'category': 1,
@@ -1296,8 +1315,34 @@ app.post('/getReviews', async (req, res, next) => {
 
 
 
-app.all('/test', async (req, res) => {
-  res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
+app.all('/test', async (req, res, next) => {
+/*
+  var pipe=[
+    {
+      $match:{category:1}
+    },{
+      $project:{post_content:1}
+    }
+  ];
+  var result= await post_data.aggregate(pipe).toArray();
+  console.log(result);
+  console.log(result.length);
+
+    //StorageUpload(result[i].post_content, result[i]._id,"post")
+for( var i=0;i<result.length;i++){
+   var link= await StorageUpload(result[i].post_content, result[i]._id,"post");
+   console.log(link);
+   await post_data.updateOne({_id:ObjectId(result[i]._id)},{ $set:{post_content:link}});
+}
+
+  res.status(200).send(result);
+
+  StorageUpload("hello", "546", "post").then((result)=>{
+    res.status(200).send("link: "+result);
+  });*/
+ res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
+
+  //res.status(200).send(); // post_content, fileName, type, next
 });
 
 app.all('/refreshLists', async (req, res, next) => {
@@ -1314,9 +1359,54 @@ app.all('/refreshLists', async (req, res, next) => {
 });
 
 
+function storageUpload(body, fileName, type){
+  return new Promise(function(resolve, reject) {
+    var bucket=admin.storage().bucket();
+    var  file=bucket.file("temp/"+fileName+".txt");
+    switch(type){
+      case 'post':{
+        file=bucket.file("post_content/"+fileName+".txt");
+        break;
+      }    
+      case 'thumb':{
+        file=bucket.file("thumbnail/"+fileName+".jpg");
+        break;
+      }
+    }
+    file.save(body).then(()=>{
+      file.getSignedUrl({ action: 'read', expires: '12-31-2050' }).then((result)=>{
+        //console.log(result);
+        resolve(result[0]);
+       })
+    }).catch((error)=>{
+      //console.error(error);
+     reject(error);
+    });
+  });
+}
 
+function storageRemove(fileName, type){
+  return new Promise(function(resolve, reject) {
+    var bucket=admin.storage().bucket();
 
-
+    switch(type){
+      case 'post':{
+        file=bucket.file("post_content/"+fileName+".txt");
+        break;
+      }    
+      case 'thumb':{
+        file=bucket.file("thumbnail/"+fileName+".jpg");
+        break;
+      }
+    }
+    file.delete().then(()=>{ 
+      resolve(true)
+    })
+    .catch((error)=>{
+     reject(error);
+    });
+  });
+}
 
 async function refreshList() {
   var start= getMillis();
@@ -1363,6 +1453,7 @@ async function refreshList() {
         'author': 1,
         'views': 1,
         'duration': 1,
+        'post_content':1,
         'summary': 1,
         'type': 1,
         'category': 1,
@@ -1415,6 +1506,7 @@ async function refreshList() {
         'views': 1,
         'duration': 1,
         'summary': 1,
+        'post_content':1,
         'type': 1,
         'category': 1,
         'created': 1,
@@ -1444,9 +1536,6 @@ async function refreshList() {
 
 
 
-
-
-
     lastRefreashed = getMillis();
     refresh_takes_milis=lastRefreashed-start;
     console.log("lists are refreashed! at: " + getTimeStamp()+"\n"+"It takes: "+refresh_takes_milis+" millis");
@@ -1464,7 +1553,7 @@ function getTimeStamp(){
 }
 
 function getMillis(){
-  return new Date().getTime();
+  return Date.now();
 }
 
 function avgRating(reviews){
