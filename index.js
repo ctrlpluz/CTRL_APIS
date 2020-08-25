@@ -1364,22 +1364,25 @@ function storageUpload(body, fileName, type){
   return new Promise(function(resolve, reject) {
     var bucket=admin.storage().bucket();
     var  file=bucket.file("temp/"+fileName+".txt");
+    var link="https://storage.googleapis.com/ctrl-pluz.appspot.com/";
+    var option={};
     switch(type){
       case 'post':{
         file=bucket.file("post_content/"+fileName+".txt");
+        option.public=true;
+        option.metadata={contentType:"application/json"};
+        link=link+"post_content/"+fileName+".txt";
         break;
       }    
       case 'thumb':{
         file=bucket.file("thumbnail/"+fileName+".jpg");
+        option.public=true;
+        option.metadata={contentType:"image/jpeg"}
+        link=link+"thumbnail/"+fileName+".jpg";
         break;
       }
     }
-    file.save(body).then(()=>{
-      file.getSignedUrl({ action: 'read', expires: '12-31-2050' }).then((result)=>{
-        //console.log(result);
-        resolve(result[0]);
-       })
-    }).catch((error)=>{
+    file.save(body,option).then(resolve(link)).catch((error)=>{
       //console.error(error);
      reject(error);
     });
