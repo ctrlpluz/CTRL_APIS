@@ -374,15 +374,11 @@ app.post('/mailVerification', async (req, res, next) => {
 
       }else next(500);
 
-
-
-
     }else next(400);
-
-
 
   } catch (error) {
     console.error(error);
+    next(500);
   }
 
 });
@@ -395,45 +391,80 @@ app.get('/verify', async (req, res, next) => {
       if(find!=null){
         var result = await user_data.updateOne({mail_id: find.mail_id},{$set:{verified: true}});
         if(result.modifiedCount==1){
+          await api_keys.deleteOne({_id: ObjectId(req.query.id)});
           res.status(200).send({
             result: true,
             message: "Acount is verified succsessfully"
           });
-
         }else next(500);
       }else next(404);
     }else next(400);
-
-
-
   } catch (error) {
     console.error(error);
   }
 
 });
 
-app.post('/forgetPassword', async (req, res) => {
+app.post('/forgetPassword', async (req, res, next) => {
   try {
+    if (req.body.mail_id!= "" && typeof req.body.mail_id!= undefined){
+      const obj = await user_data.findOne({mail_id:req.body.mail_id});
+      if(obj!=null){
+      const result= await api_keys.insertOne({user_id: ObjectId(obj._id), mail_id: req.body.mail_id, timestamp: getMillis()});
+      if(result.insertedCount==1){
+        let mailDetails = { 
+          from: 'CTRL PLUZ', 
+          to: req.body.mail_id, 
+          subject: 'Ctrl_Pluz Forget Password', 
+          text: 'TO SET NEW PASSWORD THE LINK BELOW\n'+'https://www.ctrlpluz.com/resetPassword?id='+result.insertedId
+      }; 
 
-
+      const data = await mailTransporter.sendMail(mailDetails);
+      //console.log(data);
+      if(data.accepted[0]!=null){
+        res.status(200).send({
+          result:true,
+          message: "the vefication mail has succsessfully sent to mail_id: "+ data.accepted[0]
+        });
+      }else res.status(402).send({
+        result:true,
+        message: "mail may not sent or may not accepted by reciver: " + data.accepted[0]
+      });
+        
+        } next(500);
+      }else next(404);
+    }else next(400);
 
   } catch (error) {
     console.error(error);
+    next(500);
   }
 
 });
 
-app.post('/updatePassword', async (req, res) => {
+app.post('/updatePassword', async (req, res, next) => {
   try {
+    if(typeof req.body.id!=undefined && req.body.id!=null && typeof req.body.password!=undefined && req.body.password!=null){
+      const result=await api_keys.findOne({_id:ObjectId(req.body.id)});
+      if(result!=null){
+        var update = await user_data.updateOne({_id: ObjectId(result.user_id)},{$set:{password: req.body.password}});
+        if(update.modifiedCount==1){
+          await api_keys.deleteOne({_id: ObjectId(req.body.id)});
+          res.status(200).send({
+            result: true,
+            message: "Password updated succsessfully"
+          });
+        }next(500)
+      }else next(404);
 
-
+    }else next(400);
 
   } catch (error) {
     console.error(error);
+    next(500);
   }
 
 });
-
 
 
 
@@ -1331,9 +1362,11 @@ app.all('/test', async (req, res, next) => {
 
     //StorageUpload(result[i].post_content, result[i]._id,"post")
 for( var i=0;i<result.length;i++){
-   var link= await StorageUpload(result[i].post_content, result[i]._id,"post");
-   console.log(link);
-   await post_data.updateOne({_id:ObjectId(result[i]._id)},{ $set:{post_content:link}});
+   //var link= await StorageUpload(result[i].post_content, result[i]._id,"post");
+   var bucket=admin.storage().bucket();
+   await bucket.file("post_content/"+result[i]._id+".txt").makePublic();
+   //console.log(link);
+   //await post_data.updateOne({_id:ObjectId(result[i]._id)},{ $set:{post_content:link}});
 }
 
   res.status(200).send(result);
@@ -1344,6 +1377,7 @@ for( var i=0;i<result.length;i++){
  res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
 
   //res.status(200).send(); // post_content, fileName, type, next
+
 });
 
 app.all('/refreshLists', async (req, res, next) => {
@@ -1370,7 +1404,7 @@ function storageUpload(body, fileName, type){
       case 'post':{
         file=bucket.file("post_content/"+fileName+".txt");
         option.public=true;
-        option.metadata={contentType:"application/json"};
+        option.metadata={contentType:"application/json",charset:"utf-8"};
         link=link+"post_content/"+fileName+".txt";
         break;
       }    
