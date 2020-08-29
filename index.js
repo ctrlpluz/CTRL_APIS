@@ -6,6 +6,7 @@ const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
 const express = require('express');
 const cors = require('cors')
+var compression = require('compression')
 const body_parser = require('body-parser');
 const { ObjectId } = require('mongodb');
 
@@ -15,6 +16,7 @@ const host="https://www.ctrlpluz.com";
 
 const app = express();
 app.use(cors());
+app.use(compression());
 app.use(body_parser.json());
 app.use(body_parser.raw());
 //app.use(body_parser.urlencoded());
