@@ -981,7 +981,7 @@ app.all('/getCategories', async (req, res, next) => {
 
 app.post('/getCategoryContents', async (req, res,next) => {
   try {
-    if (typeof req.body.category != undefined) {
+    if (typeof req.body.category != undefined && typeof req.body.skip == number && typeof req.body.limit == number) {
       var category_pipeline = [{
         '$match': {
           'category': req.body.category,
@@ -992,7 +992,9 @@ app.post('/getCategoryContents', async (req, res,next) => {
           'views': -1
         }
       }, {
-        '$limit': 200
+        '$skip': req.body.skip
+      },{
+        '$limit': req.body.limit
       }, {
         '$lookup': {
           'from': 'user_data',
@@ -1059,7 +1061,9 @@ app.post('/getCategoryContents', async (req, res,next) => {
 
 app.post('/getSavedStories', async (req, res) => {
   try {
-    if (req.body.user_id != null) {
+    
+    if (req.body.credential != null  && typeof req.body.credential != undefined) {
+      req.body.user_id = decrypt(req.body.credential);
       const usersPost_pipelines = [{
         '$match': {
           '_id': new ObjectId(req.body.user_id)
@@ -1110,7 +1114,8 @@ app.post('/getSavedStories', async (req, res) => {
 
 app.post('/saveStory', async (req, res) => {
   try {
-    if (req.body.user_id != null && req.body.post_id != null) {
+    if (req.body.credential != null && typeof req.body.credential != undefined && req.body.post_id != null) {
+      req.body.user_id = decrypt(req.body.credential);
       var result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
       }, {
@@ -1140,7 +1145,8 @@ app.post('/saveStory', async (req, res) => {
 
 app.post('/unsaveStory', async (req, res) => {
   try {
-    if (req.body.user_id != null && req.body.post_id != null) {
+    if (typeof req.body.credential != undefined && req.body.post_id != null) {
+      req.body.user_id = decrypt(req.body.credential);
       var result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
       }, {
