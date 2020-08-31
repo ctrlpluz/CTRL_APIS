@@ -981,7 +981,7 @@ app.all('/getCategories', async (req, res, next) => {
 
 app.post('/getCategoryContents', async (req, res,next) => {
   try {
-    if (typeof req.body.category != undefined && typeof req.body.skip == number && typeof req.body.limit == number) {
+    if (typeof req.body.category != undefined && typeof req.body.skip == 'number' && typeof req.body.limit == 'number') {
       var category_pipeline = [{
         '$match': {
           'category': req.body.category,
