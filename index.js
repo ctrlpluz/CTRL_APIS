@@ -2,6 +2,11 @@ const t1 = getMillis();
 const Cryptr = require('cryptr');
 const shuffle = require('shuffle-array');
 
+const imagemin = require('imagemin');
+const imageminWebp = require('imagemin-webp');
+
+const dataUriToBuffer = require('data-uri-to-buffer');
+
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
 const express = require('express');
@@ -17,7 +22,7 @@ const host="https://www.ctrlpluz.com";
 const app = express();
 app.use(cors());
 app.use(compression());
-app.use(body_parser.json());
+app.use(body_parser.json({limit:'4mb'}));
 app.use(body_parser.raw());
 //app.use(body_parser.urlencoded());
 const port = process.env.PORT || 3000;
@@ -306,19 +311,27 @@ app.post('/getUserInfo', async (req, res, next) => {
   }
 });
 
-// NOT YET INSPECTED
+
 app.post('/setUserInfo', async (req, res, next) => {
   try {
-    if (typeof req.body.credential != undefined) {
+    console.log(typeof req.body.credential);
+    if (typeof req.body.credential!='undefined') {
       var current_time=getMillis();
       req.body.user_id = decrypt(req.body.credential);
+
+      var avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png"
+
+      if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=''){
+        avatar_link=await storageUpload(req.body.avatar,req.body.user_id,"thumb");
+      }
+
       const result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
       }, {
         $set: {
           first_name: req.body.first_name || "",
           last_name: req.body.last_name || "",
-          avatar: req.body.avatar || "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png",
+          avatar: avatar_link,
           modified: current_time
         }
       });
@@ -346,7 +359,6 @@ app.post('/setUserInfo', async (req, res, next) => {
 
 
 
-//THIS TWO ROUT NEED NODEMAILER
 app.post('/mailVerification', async (req, res, next) => {
   try {
     if (req.body.mail_id!= "" && typeof req.body.mail_id!= undefined && req.body.credential!= "" && typeof req.body.credential!= undefined){
@@ -480,7 +492,11 @@ app.post('/createPost', async (req, res, next) => {
       const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
 
-      var link=await storageUpload(req.body.post_content || "",current_time,"post");
+      var link= await storageUpload(req.body.post_content,current_time,"post");
+      var thumb_link="https://via.placeholder.com/900x600.png?text=CTRLpluz.com"
+      if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=''){
+        thumb_link=await storageUpload(req.body.thumbnail,current_time,"thumb");
+      }
 
       var json = {};
 
@@ -491,7 +507,7 @@ app.post('/createPost', async (req, res, next) => {
       json.type = req.body.type;
       json.published = req.body.published;
       json.summary = req.body.summary;
-      json.thumbnail = req.body.thumbnail;
+      json.thumbnail = thumb_link;
       json.category = req.body.category;
       json.word_count = req.body.word_count;
       json.created = current_time;
@@ -520,8 +536,7 @@ app.post('/createPost', async (req, res, next) => {
           type: result.type,
           published: result.published,
           created: result.created,
-          modified: result.modified,
-          url: encodeURI(host+"/"+categories[result.category].name+"/"+result.title+result._id)
+          modified: result.modified
         });
 
       } else next(500)
@@ -538,10 +553,18 @@ app.post('/updatePost', async (req, res, next) => {
     if (typeof req.body.credential != undefined && req.body.post_id != "") {
       const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
+
+
       var obj= await post_data.findOne({ _id: ObjectId(req.body.post_id)});
       if (obj!=null && obj.user_id==req.body.user_id){
 
-      var link= await storageUpload(req.body.post_content,obj.created, 'post');
+
+        var link= await storageUpload(req.body.post_content,obj.created,"post");
+        var thumb_link="https://via.placeholder.com/900x600.png?text=CTRLpluz.com"
+
+        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=''){
+          thumb_link=await storageUpload(req.body.thumbnail, obj.created, "thumb");
+        }
       
       var query = {
         _id: ObjectId(req.body.post_id),
@@ -557,7 +580,7 @@ app.post('/updatePost', async (req, res, next) => {
           published: req.body.published,
           summary: req.body.summary,
           tags: req.body.tags,
-          thumbnail: req.body.thumbnail,
+          thumbnail: thumb_link,
           category: req.body.category,
           published: req.body.published,
           modified: current_time,
@@ -615,6 +638,7 @@ app.post('/removePost', async (req, res, next) => {
       var obj=await post_data.findOne({_id: ObjectId(req.body.post_id)});
       if(obj!=null && obj.user_id==req.body.user_id){
           await storageRemove(obj.created,'post');
+          await storageRemove(obj.created,'thumbnail');
 
       var result = await post_data.deleteOne(query);
 
@@ -686,10 +710,11 @@ app.post('/getLatest', async (req, res) => {
   }
 });
 //HANDEL URL  url: host+"/"+categories[result.category]+"/"+result.title+result._id
-app.post('/usersPosts', async (req, res, next) => {
+app.post('/getUsersPosts', async (req, res, next) => {
   try {
-    if (typeof req.body.user_id != undefined) {
-      const usersPost_pipelines = [{
+    if (typeof req.body.user_id!='undefined' || typeof req.body.credential!='undefined') {
+      
+      var usersPost_pipelines = [{
         '$match': {
           'user_id': new ObjectId(req.body.user_id),
           'published': true
@@ -702,6 +727,7 @@ app.post('/usersPosts', async (req, res, next) => {
           'summary': 1,
           'duration': 1,
           'type': 1,
+          'tags': 1,
           'category': 1,
           'created': 1,
           'modified': 1,
@@ -709,6 +735,31 @@ app.post('/usersPosts', async (req, res, next) => {
           'reviews':1
         }
       }];
+
+      if(typeof req.body.credential!='undefined'){
+        usersPost_pipelines = [{
+          '$match': {
+            'user_id': new ObjectId(decrypt(req.body.credential))
+          }
+        }, {
+          '$project': {
+            'title': 1,
+            'thumbnail': 1,
+            'views': 1,
+            'summary': 1,
+            'duration': 1,
+            'type': 1,
+            'tags': 1,
+            'category': 1,
+            'created': 1,
+            'modified': 1,
+            'share':1,
+            'reviews':1
+          }
+        }];
+      }
+      
+
       var result = await post_data.aggregate(usersPost_pipelines).toArray();
       //console.log(result);
       if (result.length != 0) {
@@ -720,7 +771,7 @@ app.post('/usersPosts', async (req, res, next) => {
         }
         res.send({
           result: true,
-          array: result
+          posts: result
         });
       } else {
         next(404);
@@ -736,22 +787,8 @@ app.post('/usersPosts', async (req, res, next) => {
 
 app.post('/getPost', async (req, res, next) => {
   try {
-    if (typeof req.body.post_id != undefined) {
+    if (typeof req.body.post_id!= 'undefined') {
 
-       const project =  {
-          'title': 1,
-          'thumbnail': 1,
-          'views': 1,
-          'summary': 1,
-          'duration': 1,
-          'type': 1,
-          'category': 1,
-          'created': 1,
-          'modified': 1,
-          'share':1,
-          'post_content':1,
-          'reviews':1
-        }
         const get_post_query = [{
           '$match': {
             '_id': ObjectId(req.body.post_id)
@@ -773,6 +810,7 @@ app.post('/getPost', async (req, res, next) => {
             'views': 1,
             'post_content':1,
             'duration': 1,
+            'tags': 1,
             'summary': 1,
             'type': 1,
             'category': 1,
@@ -794,6 +832,7 @@ app.post('/getPost', async (req, res, next) => {
           post_id: result._id,
           thumbnail: result.thumbnail,
           views: result.views,
+          tags: result.tags,
           summary: result.summary,
           duration: result.duration,
           post_content: result.post_content,
@@ -802,7 +841,6 @@ app.post('/getPost', async (req, res, next) => {
           created:  result.created,
           modified: result.modified,
           share:  result.share,
-          url: encodeURI(host+"/"+categories[result.category].name+"/"+result.title+result._id),
           rating: avgRating(result.reviews),
           author:{
             first_name:result.author[0].first_name,
@@ -873,7 +911,7 @@ app.post('/setView', async (req, res, next) => {
 
 app.post('/setShare', async (req, res, next) => {
   try {
-    if (typeof req.body.post_id != undefined){
+    if (typeof req.body.post_id!= 'undefined'){
       const result = await post_data.updateOne({_id: ObjectId(req.body.post_id)},{
         $inc: {share:1}
       });
@@ -1059,10 +1097,10 @@ app.post('/getCategoryContents', async (req, res,next) => {
 
 
 
-app.post('/getSavedStories', async (req, res) => {
+app.post('/getSavedStories', async (req, res, next) => {
   try {
     
-    if (req.body.credential != null  && typeof req.body.credential != undefined) {
+    if (req.body.credential!= null  && typeof req.body.credential!= 'undefined') {
       req.body.user_id = decrypt(req.body.credential);
       const usersPost_pipelines = [{
         '$match': {
@@ -1091,31 +1129,23 @@ app.post('/getSavedStories', async (req, res) => {
         result.result = true;
         //console.log(result);
         res.send(result);
-      } else {
-        res.send({
-          "result": false,
-          "message": "user don't write any post"
-        });
-      }
+      } else next(404);
 
-    } else {
-      res.send({
-        "result": false,
-        "message": "no user_id found in request."
-      });
-    }
+    } else next(400);
 
 
   } catch (error) {
-    console.error(error);
+    next(500);
   }
 
 });
 
-app.post('/saveStory', async (req, res) => {
+app.post('/saveStory', async (req, res, next) => {
   try {
-    if (req.body.credential != null && typeof req.body.credential != undefined && req.body.post_id != null) {
+    if (req.body.credential!= null && typeof req.body.credential!= 'undefined' && req.body.post_id!= null && typeof req.body.post_id!= 'undefined') {
+      
       req.body.user_id = decrypt(req.body.credential);
+      
       var result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
       }, {
@@ -1123,29 +1153,24 @@ app.post('/saveStory', async (req, res) => {
           "saved": ObjectId(req.body.post_id)
         }
       });
-      if (result != null) {
-        // console.log(result);
+
+      if (result.modifiedCount==1) {
+         //console.log(result);
         res.send({
           "result": true
         });
       }
-    } else {
-      res.send({
-        "result": false,
-        "message": "some params are missing in request."
-      });
-    }
-
-
+    } else next(400);
   } catch (error) {
-    console.error(error);
+    //console.error(error);
+    next(500);
   }
 
 });
 
-app.post('/unsaveStory', async (req, res) => {
+app.post('/unsaveStory', async (req, res, next) => {
   try {
-    if (typeof req.body.credential != undefined && req.body.post_id != null) {
+    if (req.body.credential!= null && typeof req.body.credential!= 'undefined' && req.body.post_id!= null && typeof req.body.post_id!= 'undefined') {
       req.body.user_id = decrypt(req.body.credential);
       var result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
@@ -1154,22 +1179,16 @@ app.post('/unsaveStory', async (req, res) => {
           saved: new ObjectId(req.body.post_id)
         }
       });
-      if (result != null) {
+      if (result!= null) {
         //console.log(result);
         res.send({
           "result": true
         });
       }
-    } else {
-      res.send({
-        "result": false,
-        "message": "some params are missing in request."
-      });
-    }
-
+    } else next(400);
 
   } catch (error) {
-    console.error(error);
+    next(500);
   }
 
 });
@@ -1356,6 +1375,20 @@ app.post('/getReviews', async (req, res, next) => {
 
 
 app.all('/test', async (req, res, next) => {
+  /*
+try {
+  const t1=getMillis();
+  //console.log(req.body.thumbnail)
+  const link = await storageUpload(req.body.thumbnail,'test1','thumb');
+  const t2=getMillis();
+  console.log("compression takes: "+(t2-t1)+" milisec.." );
+  res.send(link);
+} catch (error) {
+  //console.log(error);
+  next(500);
+}
+  */
+
 /*
   var pipe=[
     {
@@ -1382,7 +1415,7 @@ for( var i=0;i<result.length;i++){
   StorageUpload("hello", "546", "post").then((result)=>{
     res.status(200).send("link: "+result);
   });*/
- res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
+  res.status(200).send("<html><body><h1>Current Server Time :"+getTimeStamp()+"</h1></body></html>");
 
   //res.status(200).send(); // post_content, fileName, type, next
 
@@ -1414,20 +1447,27 @@ function storageUpload(body, fileName, type){
         option.public=true;
         option.metadata={contentType:"application/json",charset:"utf-8"};
         link=link+"post_content/"+fileName+".txt";
+        file.save(body,option).then(resolve(link)).catch((error)=>{
+          //console.error(error);
+         reject(error);
+        });
         break;
       }    
       case 'thumb':{
-        file=bucket.file("thumbnail/"+fileName+".jpg");
+        file=bucket.file("thumbnail/"+fileName+".webp");
         option.public=true;
-        option.metadata={contentType:"image/jpeg"}
-        link=link+"thumbnail/"+fileName+".jpg";
+        option.metadata={contentType:"image/webp"}
+        link=link+"thumbnail/"+fileName+".webp";
+        dataURL2webp(body).then((buffer)=>{
+          file.save(buffer,option).then(resolve(link)).catch((error)=>{
+            //console.error(error);
+           reject(error);
+          });
+        });
         break;
       }
     }
-    file.save(body,option).then(resolve(link)).catch((error)=>{
-      //console.error(error);
-     reject(error);
-    });
+
   });
 }
 
@@ -1441,7 +1481,7 @@ function storageRemove(fileName, type){
         break;
       }    
       case 'thumb':{
-        file=bucket.file("thumbnail/"+fileName+".jpg");
+        file=bucket.file("thumbnail/"+fileName+".webp");
         break;
       }
     }
@@ -1452,6 +1492,18 @@ function storageRemove(fileName, type){
      reject(error);
     });
   });
+}
+function dataURL2webp(dataurl){
+  return new Promise(function(resolve, reject) {
+    imagemin.buffer(dataUriToBuffer(dataurl), {
+      plugins: [
+          imageminWebp({quality: 20, method:6, alphaQuality:30, size:20480, 
+            resize:{ width: 200, height: 0 }})
+      ]
+  }).then(function(buffer){resolve(buffer)}).catch((error)=>{reject(error)});
+
+  });
+
 }
 
 async function refreshList() {
@@ -1594,7 +1646,7 @@ async function refreshList() {
 
 function getTimeStamp(){
   var date=new Date();
-  var timestamp = date.getDate()+"."+date.getMonth()+"."+date.getFullYear()+"-"+ date.getHours()+":"+date.getMinutes()+":"+date.getSeconds()+"."+date.getMilliseconds();
+  var timestamp = date.getDate()+"."+date.getMonth()+"."+date.getFullYear()+"-"+ date.getUTCHours()+":"+date.getUTCMinutes()+":"+date.getUTCSeconds()+"."+date.getUTCMilliseconds();
   return timestamp;
 }
 
@@ -1612,7 +1664,7 @@ function avgRating(reviews){
 }
   return rating;
 }
-
+/*
 function dataURLtoBlob(dataurl) {
   var arr = dataurl.split(','),
     mime = arr[0].match(/:(.*?);/)[1],
@@ -1622,10 +1674,8 @@ function dataURLtoBlob(dataurl) {
   while (n--) {
     u8arr[n] = bstr.charCodeAt(n);
   }
-  return new Blob([u8arr], {
-    type: mime
-  });
-}
+  return new Blob([u8arr], { type: mime});
+}*/
 
 function encrypt(value) {
   return cryptr.encrypt(value);
@@ -1722,3 +1772,6 @@ app.use((err, req, res, next) => {
     }
   }
 });
+
+
+
