@@ -1700,6 +1700,7 @@ app.use((err, req, res, next) => {
       res.status(err);
       res.send({
         result: false,
+		status:err,
         message: "It was a bad request, maybe you had provided wrong parameters or fields."
       });
       break;
@@ -1716,6 +1717,7 @@ app.use((err, req, res, next) => {
       res.status(err);
       res.send({
         result: false,
+		status:err,
         message: "It was a UNAUTHORIZE request, maybe you provided the wrong credential key"
       });
       break;
@@ -1729,15 +1731,16 @@ app.use((err, req, res, next) => {
         message: "It was a NOT FOUND error, data you are looking for is not found in the database."
 
       });
-      res.status(err);
+      res.status(200);
       res.send({
         result: false,
+		status:err,
         message: "It was a NOT FOUND error, data you are looking for is not found in the database."
       });
       break;
     }
 
-    case 409: { //NOT FOUND
+    case 409: { //
       console.error({
         error_code: err,
         path: req.path,
@@ -1749,6 +1752,7 @@ app.use((err, req, res, next) => {
       res.status(err);
       res.send({
         result: false,
+		status:err,
         message: "Resource already exist in database."
       });
       break;
@@ -1766,6 +1770,7 @@ app.use((err, req, res, next) => {
       res.status(err);
       res.send({
         result: false,
+		status:err,
         message: "It looks like an error occurred in server contact with backend developer."
       });
       break;
