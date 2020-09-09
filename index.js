@@ -494,7 +494,7 @@ app.post('/createPost', async (req, res, next) => {
 
       var link= await storageUpload(req.body.post_content,current_time,"post");
       var thumb_link="https://via.placeholder.com/900x600.png?text=CTRLpluz.com"
-      if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=''){
+      if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null){
         thumb_link=await storageUpload(req.body.thumbnail,current_time,"thumb");
       }
 
@@ -562,7 +562,7 @@ app.post('/updatePost', async (req, res, next) => {
         var link= await storageUpload(req.body.post_content,obj.created,"post");
         var thumb_link="https://via.placeholder.com/900x600.png?text=CTRLpluz.com"
 
-        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=''){
+        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null){
           thumb_link=await storageUpload(req.body.thumbnail, obj.created, "thumb");
         }
       
@@ -759,7 +759,8 @@ app.post('/getUsersPosts', async (req, res, next) => {
         }];
       }
       
-
+      var user=await user_data.findOne({_id:ObjectId(req.body.user_id)},{first_name:1,last_name:1,created:1});
+      if(user!=null){
       var result = await post_data.aggregate(usersPost_pipelines).toArray();
       //console.log(result);
       if (result.length != 0) {
@@ -771,9 +772,11 @@ app.post('/getUsersPosts', async (req, res, next) => {
         }
         res.send({
           result: true,
+          user:user,
           posts: result
         });
-      } else {
+      } 
+    }else {
         next(404);
       }
     } else {
