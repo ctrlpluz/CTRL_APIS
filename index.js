@@ -562,7 +562,7 @@ app.post('/updatePost', async (req, res, next) => {
         var link= await storageUpload(req.body.post_content,obj.created,"post");
         var thumb_link="https://via.placeholder.com/900x600.png?text=CTRLpluz.com"
 
-        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null){
+        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null && req.body.thumbnail.startsWith("data:")){
           thumb_link=await storageUpload(req.body.thumbnail, obj.created, "thumb");
         }
       
@@ -736,7 +736,7 @@ app.post('/getUsersPosts', async (req, res, next) => {
         }
       }];
 
-      if(typeof req.body.credential!='undefined'){
+      if(typeof req.body.credential!='undefined' && typeof req.body.credential!=null){
         req.body.user_id=decrypt(req.body.credential);
         usersPost_pipelines = [{
           '$match': {
@@ -760,7 +760,7 @@ app.post('/getUsersPosts', async (req, res, next) => {
         }];
       }
       
-      var user=await user_data.findOne({_id:ObjectId(req.body.user_id)});
+      var user=await user_data.findOne({_id:ObjectId(req.body.user_id)},{first_name:1,last_name:1,created:1});
       if(user!=null){
       var result = await post_data.aggregate(usersPost_pipelines).toArray();
       console.log(user);
