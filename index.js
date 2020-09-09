@@ -737,9 +737,10 @@ app.post('/getUsersPosts', async (req, res, next) => {
       }];
 
       if(typeof req.body.credential!='undefined'){
+        req.body.user_id=decrypt(req.body.credential);
         usersPost_pipelines = [{
           '$match': {
-            'user_id': new ObjectId(decrypt(req.body.credential))
+            'user_id': new ObjectId(req.body.user_id)
           }
         }, {
           '$project': {
