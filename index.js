@@ -99,6 +99,7 @@ MongoClient.connect(url, {useUnifiedTopology: true }, function (err, DBclient) {
   app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
    refreshList();
+   refreshCategory();
     const t2 = getMillis();
     console.log("Server Started at: "+ getTimeStamp()+"\nIt takes " + (t2 - t1) + " miliseconds to initilize...");
   });
@@ -147,6 +148,14 @@ app.post('/signUp', async (req, res, next) => {
   try {
 
     if (typeof req.body.mail_id!= undefined && typeof req.body.password!= undefined && req.body.mail_id!= "" && req.body.password!= "") {
+      var avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png";
+      if(req.body.gender==1){
+        avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png";
+      }
+      if(req.body.gender==2){
+        avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png";
+      }
+
       var json = {};
       const current_time = getMillis();
       json.first_name = req.body.first_name || "Name";
@@ -155,7 +164,7 @@ app.post('/signUp', async (req, res, next) => {
       json.password = req.body.password || "";
       json.created = current_time;
       json.modified = current_time;
-      json.avatar = "https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png";
+      json.avatar = avatar_link;
       json.verified = false;
   
       var result = await user_data.insertOne(json);
@@ -429,7 +438,7 @@ app.post('/forgetPassword', async (req, res, next) => {
           from: 'CTRL PLUZ', 
           to: req.body.mail_id, 
           subject: 'Ctrl_Pluz Forget Password', 
-          text: 'TO SET NEW PASSWORD THE LINK BELOW\n'+'https://www.ctrlpluz.com/resetPassword?id='+result.insertedId
+          text: 'TO SET NEW PASSWORD THE LINK BELOW\n'+'https://ctrlpluspwa.firebaseapp.com/resetPassword?id='+result.insertedId
       }; 
 
       const data = await mailTransporter.sendMail(mailDetails);
@@ -437,10 +446,12 @@ app.post('/forgetPassword', async (req, res, next) => {
       if(data.accepted[0]!=null){
         res.status(200).send({
           result:true,
-          message: "the vefication mail has succsessfully sent to mail_id: "+ data.accepted[0]
+          status:200,
+          message: "the verification mail has succsessfully sent to mail_id: "+ data.accepted[0]
         });
       }else res.status(402).send({
-        result:true,
+        result:false,
+        status:402,
         message: "mail may not sent or may not accepted by reciver: " + data.accepted[0]
       });
         
@@ -455,7 +466,7 @@ app.post('/forgetPassword', async (req, res, next) => {
 
 });
 
-app.post('/updatePassword', async (req, res, next) => {
+app.post('/resetPassword', async (req, res, next) => {
   try {
     if(typeof req.body.id!=undefined && req.body.id!=null && typeof req.body.password!=undefined && req.body.password!=null){
       const result=await api_keys.findOne({_id:ObjectId(req.body.id)});
@@ -465,7 +476,8 @@ app.post('/updatePassword', async (req, res, next) => {
           await api_keys.deleteOne({_id: ObjectId(req.body.id)});
           res.status(200).send({
             result: true,
-            message: "Password updated succsessfully"
+            status:200,
+            message: "Password updated successfully "
           });
         }next(500)
       }else next(404);
@@ -482,11 +494,9 @@ app.post('/updatePassword', async (req, res, next) => {
 
 
 
-
 // need to handel thumbnail and duration &  total number of post in user_data 
 app.post('/createPost', async (req, res, next) => {
-  try {
-    
+  try {   
     if (typeof req.body.credential != undefined && req.body.credential != "") {
       const current_time= getMillis();
       req.body.user_id = decrypt(req.body.credential);
@@ -537,7 +547,7 @@ app.post('/createPost', async (req, res, next) => {
           created: result.created,
           modified: result.modified
         });
-
+        refreshLatest();
       } else next(500)
     } else next(400);
   } catch (error) {
@@ -647,6 +657,7 @@ app.post('/removePost', async (req, res, next) => {
           result: true,
           message: "post has deleted successfully"
         });
+        refreshLatest();
       }
       } else next(401)
     } else next(400);
@@ -1432,6 +1443,7 @@ for( var i=0;i<result.length;i++){
 app.all('/refreshLists', async (req, res, next) => {
   try {
     refreshList();
+    await refreshCategory();
     res.status(200).send({
       result: true,
       message: "All the caches are refreshed at: "+getTimeStamp()+" Refresh takes: "+refresh_takes_milis+" millis to complete..."
@@ -1439,7 +1451,6 @@ app.all('/refreshLists', async (req, res, next) => {
   } catch (error) {
     next(500);
   }
-
 });
 
 
@@ -1536,7 +1547,11 @@ function dataURL2webp(dataurl){
 async function refreshList() {
   var start= getMillis();
   try {
-    var catagories_pipeline = [{
+
+    await refreshLatest();
+    await refreshRecomanded();
+
+/*var catagories_pipeline = [{
       $match: {
         name: "categories"
       }
@@ -1546,7 +1561,6 @@ async function refreshList() {
         value: 1
       }
     }
-
   ];
   categories = await others.aggregate(catagories_pipeline).toArray();
   if(categories.length!=0){
@@ -1658,7 +1672,7 @@ async function refreshList() {
       object.author = author;
       latest[i] = object;
     }}
-
+*/
 
 
     lastRefreashed = getMillis();
@@ -1670,6 +1684,150 @@ async function refreshList() {
     console.error(error)
   }
 }
+
+function refreshLatest(){
+  return new Promise(function(resolve, reject) {
+    const latest_query = [{
+      '$match': {
+        'published': true
+      }
+    }, {
+      '$limit': 200
+    },{
+      '$sort': {
+        'created': -1
+      }
+    }, {
+      '$lookup': {
+        'from': 'user_data',
+        'localField': 'user_id',
+        'foreignField': '_id',
+        'as': 'author'
+      }
+    }, {
+      '$project': {
+        'title': 1,
+        'thumbnail': 1,
+        'author': 1,
+        'views': 1,
+        'duration': 1,
+        'summary': 1,
+        'post_content':1,
+        'type': 1,
+        'category': 1,
+        'created': 1,
+        'modified': 1,
+        'share':1,
+        'reviews':1
+      }
+    }];
+    post_data.aggregate(latest_query).toArray().then((latest)=>{
+      if(latest.length!=0){
+        for (var i = 0; i < latest.length; i++) {
+          let object = latest[i];     
+          object.url = encodeURI(host+"/"+categories[object.category].name+"/"+object.title+object._id)
+          object.post_id = object._id
+          delete object._id;
+          object.rating = avgRating(object.reviews);
+          delete object.reviews;
+          let temp = object.author[0];
+          let author = {}
+          author.first_name = temp.first_name;
+          author.last_name = temp.last_name;
+          author.avatar = temp.avatar;
+          author.user_id = temp._id;
+          object.author = author;
+          latest[i] = object;
+        }
+        resolve(true);
+      }
+    }).catch((err)=>{reject(err)});
+  });
+}
+function refreshRecomanded(){
+  return new Promise(function(resolve, reject) {
+    const recomanded_query = [{
+      '$match': {
+        'published': true
+      }
+    }, {
+      '$sort': {
+        'views': -1
+      }
+    }, {
+      '$limit': 100
+    }, {
+      '$lookup': {
+        'from': 'user_data',
+        'localField': 'user_id',
+        'foreignField': '_id',
+        'as': 'author'
+      }
+    }, {
+      '$project': {
+        'title': 1,
+        'thumbnail': 1,
+        'author': 1,
+        'views': 1,
+        'duration': 1,
+        'post_content':1,
+        'summary': 1,
+        'type': 1,
+        'category': 1,
+        'created': 1,
+        'modified': 1,
+        'share':1
+      }
+    }];
+    post_data.aggregate(recomanded_query).toArray().then((result)=>{
+      recomanded=result;
+      if(recomanded.length!=0){
+        for (var i = 0; i < recomanded.length; i++) {
+          let object = recomanded[i];
+          object.url =encodeURI( host+"/"+categories[object.category].name+"/"+object.title+object._id);
+          object.post_id = object._id;
+          let temp = object.author[0];
+          delete object._id;
+         // console.log(object)
+          let author = {}
+          author.first_name = temp.first_name;
+          author.last_name = temp.last_name;
+          author.avatar = temp.avatar;
+          author.user_id = temp._id;
+          object.author = author;
+          recomanded[i] = object;
+        }
+        resolve(true);
+      }
+      
+    }).catch((error)=>{reject(error)});
+
+  });
+}
+
+function refreshCategory(){
+  return new Promise(function(resolve, reject) {
+    var catagories_pipeline = [{
+      $match: {
+        name: "categories"
+      }
+    }, {
+      $project: {
+        _id: 0,
+        value: 1
+      }
+    }
+  ];
+    others.aggregate(catagories_pipeline).toArray().then((result)=>{
+      if(categories.length!=0){
+        categories = categories[0].value;
+        //console.log(categories);
+        resolve(true);
+        }
+    }).catch((error)=>{reject(error)});
+  });
+}
+
 
 function getTimeStamp(){
   var date=new Date();
