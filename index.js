@@ -27,7 +27,7 @@ app.use(body_parser.raw());
 //app.use(body_parser.urlencoded());
 const port = process.env.PORT || 3000;
 
-var client, db, user_data, post_data, reports, api_keys, others;
+var client, db, user_data, post_data, api_keys, others;
 var latest = [];
 var recomanded = [];
 var categories = [];
@@ -321,8 +321,8 @@ app.post('/setUserInfo', async (req, res, next) => {
 
       var avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png"
 
-      if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=''){
-        avatar_link=await storageUpload(req.body.avatar,req.body.user_id,"thumb");
+      if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=null && req.body.avatar.startsWith("data:")){
+        avatar_link=await storageUpload(req.body.avatar,req.body.user_id,"avatar");
       }
 
       const result = await user_data.updateOne({
@@ -340,7 +340,7 @@ app.post('/setUserInfo', async (req, res, next) => {
           result: true,
           first_name: req.body.first_name,
           last_name: req.body.last_name,
-          avatar: req.body.avatar,
+          avatar: avatar_link,
           modified: current_time
         });
       } else next(401);
@@ -352,7 +352,6 @@ app.post('/setUserInfo', async (req, res, next) => {
   }
 
 });
-
 
 
 
@@ -638,7 +637,7 @@ app.post('/removePost', async (req, res, next) => {
       var obj=await post_data.findOne({_id: ObjectId(req.body.post_id)});
       if(obj!=null && obj.user_id==req.body.user_id){
           await storageRemove(obj.created,'post');
-          await storageRemove(obj.created,'thumbnail');
+          await storageRemove(obj.created,'thumb');
 
       var result = await post_data.deleteOne(query);
 
@@ -760,10 +759,15 @@ app.post('/getUsersPosts', async (req, res, next) => {
         }];
       }
       
-      var user=await user_data.findOne({_id:ObjectId(req.body.user_id)},{first_name:1,last_name:1,created:1});
+      var user=await user_data.findOne({_id:ObjectId(req.body.user_id)});
       if(user!=null){
-      var result = await post_data.aggregate(usersPost_pipelines).toArray();
-      console.log(user);
+        delete user.password;
+        delete user.mail_id;
+        delete user.verified;
+        user.user_id= user._id;
+        delete user._id;
+        var result = await post_data.aggregate(usersPost_pipelines).toArray();
+      //console.log(user);
       if (result.length != 0) {
         for(var i=0; i<result.length;i++){
           var object=result[i];
@@ -1470,6 +1474,20 @@ function storageUpload(body, fileName, type){
         });
         break;
       }
+
+      case 'avatar':{
+        file=bucket.file("avatar/"+fileName+".webp");
+        option.public=true;
+        option.metadata={contentType:"image/webp"}
+        link=link+"avatar/"+fileName+".webp";
+        dataURL2webp(body).then((buffer)=>{
+          file.save(buffer,option).then(resolve(link)).catch((error)=>{
+            //console.error(error);
+           reject(error);
+          });
+        });
+        break;
+      }
     }
 
   });
@@ -1488,6 +1506,10 @@ function storageRemove(fileName, type){
         file=bucket.file("thumbnail/"+fileName+".webp");
         break;
       }
+      case 'avatar':{
+        file=bucket.file("avatar/"+fileName+".webp");
+        break;
+      }
     }
     file.delete().then(()=>{ 
       resolve(true)
@@ -1497,12 +1519,13 @@ function storageRemove(fileName, type){
     });
   });
 }
+
 function dataURL2webp(dataurl){
   return new Promise(function(resolve, reject) {
     imagemin.buffer(dataUriToBuffer(dataurl), {
       plugins: [
-          imageminWebp({quality: 20, method:6, alphaQuality:30, size:20480, 
-            resize:{ width: 200, height: 0 }})
+          imageminWebp({quality: 30, method:6, alphaQuality:30, size:30480, 
+            resize:{ width: 400, height: 0 }})
       ]
   }).then(function(buffer){resolve(buffer)}).catch((error)=>{reject(error)});
 
@@ -1735,7 +1758,7 @@ app.use((err, req, res, next) => {
         message: "It was a NOT FOUND error, data you are looking for is not found in the database."
 
       });
-      res.status(200);
+      res.status(err);
       res.send({
         result: false,
 		status:err,
