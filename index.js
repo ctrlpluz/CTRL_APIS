@@ -98,8 +98,12 @@ MongoClient.connect(url, {useUnifiedTopology: true }, function (err, DBclient) {
 */
   app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-   refreshList();
-   refreshCategory();
+   
+  refreshCategory().then(()=>{
+    refreshList();
+  });
+
+
     const t2 = getMillis();
     console.log("Server Started at: "+ getTimeStamp()+"\nIt takes " + (t2 - t1) + " miliseconds to initilize...");
   });
@@ -435,26 +439,29 @@ app.post('/forgetPassword', async (req, res, next) => {
       const result= await api_keys.insertOne({user_id: ObjectId(obj._id), mail_id: req.body.mail_id, timestamp: getMillis()});
       if(result.insertedCount==1){
         let mailDetails = { 
-          from: 'CTRL PLUZ', 
-          to: req.body.mail_id, 
-          subject: 'Ctrl_Pluz Forget Password', 
+          from: 'engineeringtips2020@gmail.com', 
+          to: req.body.mail_id,
+          subject: 'Ctrl_Pluz Reset Password', 
           text: 'TO SET NEW PASSWORD THE LINK BELOW\n'+'https://ctrlpluspwa.firebaseapp.com/resetPassword?id='+result.insertedId
       }; 
 
       const data = await mailTransporter.sendMail(mailDetails);
       //console.log(data);
       if(data.accepted[0]!=null){
-        res.status(200).send({
+        res.status(200);
+        res.send({
           result:true,
           status:200,
           message: "the verification mail has succsessfully sent to mail_id: "+ data.accepted[0]
         });
-      }else res.status(402).send({
+      }else {
+        res.status(402);
+      res.send({
         result:false,
         status:402,
         message: "mail may not sent or may not accepted by reciver: " + data.accepted[0]
       });
-        
+    }
         } next(500);
       }else next(404);
     }else next(400);
@@ -658,6 +665,7 @@ app.post('/removePost', async (req, res, next) => {
           message: "post has deleted successfully"
         });
         refreshLatest();
+        refreshRecomanded();
       }
       } else next(401)
     } else next(400);
@@ -829,6 +837,7 @@ app.post('/getPost', async (req, res, next) => {
             'views': 1,
             'post_content':1,
             'duration': 1,
+            'published':1,
             'tags': 1,
             'summary': 1,
             'type': 1,
@@ -852,6 +861,7 @@ app.post('/getPost', async (req, res, next) => {
           thumbnail: result.thumbnail,
           views: result.views,
           tags: result.tags,
+          published:result.published,
           summary: result.summary,
           duration: result.duration,
           post_content: result.post_content,
@@ -860,7 +870,7 @@ app.post('/getPost', async (req, res, next) => {
           created:  result.created,
           modified: result.modified,
           share:  result.share,
-          rating: avgRating(result.reviews),
+          //rating: avgRating(result.reviews),
           author:{
             first_name:result.author[0].first_name,
             last_name:result.author[0].last_name,
@@ -1442,8 +1452,9 @@ for( var i=0;i<result.length;i++){
 
 app.all('/refreshLists', async (req, res, next) => {
   try {
-    refreshList();
     await refreshCategory();
+    refreshList();
+ 
     res.status(200).send({
       result: true,
       message: "All the caches are refreshed at: "+getTimeStamp()+" Refresh takes: "+refresh_takes_milis+" millis to complete..."
@@ -1452,7 +1463,17 @@ app.all('/refreshLists', async (req, res, next) => {
     next(500);
   }
 });
-
+app.all('/refreshCategory', async (req, res, next) => {
+  try {
+    await refreshCategory();
+    res.status(200).send({
+      result: true,
+      message: "Category the cache are refreshed at: "+getTimeStamp()
+    })
+  } catch (error) {
+    next(500);
+  }
+});
 
 function storageUpload(body, fileName, type){
   return new Promise(function(resolve, reject) {
@@ -1725,18 +1746,20 @@ function refreshLatest(){
       if(latest.length!=0){
         for (var i = 0; i < latest.length; i++) {
           let object = latest[i];     
-          object.url = encodeURI(host+"/"+categories[object.category].name+"/"+object.title+object._id)
+          //object.url = encodeURI(host+"/"+categories[object.category].name+"/"+object.title+object._id)
           object.post_id = object._id
           delete object._id;
-          object.rating = avgRating(object.reviews);
+          //object.rating = avgRating(object.reviews);
           delete object.reviews;
           let temp = object.author[0];
-          let author = {}
+          if(temp!='undefined' && temp!=null){
+            let author = {}
           author.first_name = temp.first_name;
           author.last_name = temp.last_name;
           author.avatar = temp.avatar;
           author.user_id = temp._id;
           object.author = author;
+          }
           latest[i] = object;
         }
         resolve(true);
@@ -1784,17 +1807,19 @@ function refreshRecomanded(){
       if(recomanded.length!=0){
         for (var i = 0; i < recomanded.length; i++) {
           let object = recomanded[i];
-          object.url =encodeURI( host+"/"+categories[object.category].name+"/"+object.title+object._id);
+          //object.url =encodeURI( host+"/"+categories[object.category].name+"/"+object.title+object._id);
           object.post_id = object._id;
           let temp = object.author[0];
           delete object._id;
          // console.log(object)
+         if(temp!='undefined' && temp!=null){
           let author = {}
           author.first_name = temp.first_name;
           author.last_name = temp.last_name;
           author.avatar = temp.avatar;
           author.user_id = temp._id;
           object.author = author;
+         }
           recomanded[i] = object;
         }
         resolve(true);
@@ -1819,6 +1844,7 @@ function refreshCategory(){
     }
   ];
     others.aggregate(catagories_pipeline).toArray().then((result)=>{
+      categories=result;
       if(categories.length!=0){
         categories = categories[0].value;
         //console.log(categories);
