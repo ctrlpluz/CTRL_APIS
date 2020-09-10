@@ -1742,7 +1742,8 @@ function refreshLatest(){
         'reviews':1
       }
     }];
-    post_data.aggregate(latest_query).toArray().then((latest)=>{
+    post_data.aggregate(latest_query).toArray().then((result)=>{
+		latest=result;
       if(latest.length!=0){
         for (var i = 0; i < latest.length; i++) {
           let object = latest[i];     
