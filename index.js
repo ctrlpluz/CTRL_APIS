@@ -1524,8 +1524,8 @@ function dataURL2webp(dataurl){
   return new Promise(function(resolve, reject) {
     imagemin.buffer(dataUriToBuffer(dataurl), {
       plugins: [
-          imageminWebp({quality: 30, method:6, alphaQuality:30, size:30480, 
-            resize:{ width: 400, height: 0 }})
+          imageminWebp({quality: 30, method:6, alphaQuality:30, size:40480, 
+            resize:{ width: 550, height: 0 }})
       ]
   }).then(function(buffer){resolve(buffer)}).catch((error)=>{reject(error)});
 
