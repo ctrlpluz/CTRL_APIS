@@ -359,7 +359,7 @@ app.post('/setUserInfo', async (req, res, next) => {
         });
         refreshLatest();
       } else next(401);
-    }next(404);
+    } else next(404);
     } else next(400);
 
   } catch (error) {
