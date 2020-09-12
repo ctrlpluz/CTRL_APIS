@@ -10,7 +10,7 @@ const dataUriToBuffer = require('data-uri-to-buffer');
 const cryptr = new Cryptr("123"); //THE SECREAT KEY
 const nodemailer = require('nodemailer'); 
 const express = require('express');
-const cors = require('cors')
+const cors = require('cors');
 var compression = require('compression')
 const body_parser = require('body-parser');
 const { ObjectId } = require('mongodb');
@@ -327,8 +327,8 @@ app.post('/getUserInfo', async (req, res, next) => {
 
 app.post('/setUserInfo', async (req, res, next) => {
   try {
-    console.log(typeof req.body.credential);
-    if (typeof req.body.credential!='undefined') {
+    //console.log(typeof req.body.credential);
+    if (typeof req.body.credential!='undefined' && typeof req.body.credential!=null) {
       var current_time=getMillis();
       req.body.user_id = decrypt(req.body.credential);
 
@@ -356,6 +356,7 @@ app.post('/setUserInfo', async (req, res, next) => {
           avatar: avatar_link,
           modified: current_time
         });
+        refreshLatest();
       } else next(401);
     } else next(400);
 
@@ -654,7 +655,11 @@ app.post('/removePost', async (req, res, next) => {
       var obj=await post_data.findOne({_id: ObjectId(req.body.post_id)});
       if(obj!=null && obj.user_id==req.body.user_id){
           await storageRemove(obj.created,'post');
-          await storageRemove(obj.created,'thumb');
+
+          if(obj.thumbnail.startsWith("https://storage.googleapis.com")){
+            await storageRemove(obj.created,'thumb');
+          }
+          
 
       var result = await post_data.deleteOne(query);
 
@@ -1037,7 +1042,7 @@ app.post('/updateCategories', async (req, res, next) => {
 //Review needs to add
 app.all('/getCategories', async (req, res, next) => {
   try {
-    res.status(200).send(shuffle(categories, { 'copy': true }));
+    res.status(200).send(categories);
 
   } catch (error) {
     console.error(error);
@@ -1713,7 +1718,7 @@ function refreshLatest(){
         'published': true
       }
     }, {
-      '$limit': 200
+      '$limit': 100
     },{
       '$sort': {
         'created': -1
@@ -1779,7 +1784,7 @@ function refreshRecomanded(){
         'views': -1
       }
     }, {
-      '$limit': 100
+      '$limit': 50
     }, {
       '$lookup': {
         'from': 'user_data',
