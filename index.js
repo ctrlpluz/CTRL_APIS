@@ -331,11 +331,12 @@ app.post('/setUserInfo', async (req, res, next) => {
     if (typeof req.body.credential!='undefined' && typeof req.body.credential!=null) {
       var current_time=getMillis();
       req.body.user_id = decrypt(req.body.credential);
-
+      const obj = await user_data.updateOne({_id:ObjectId(req.body.user_id)});
+      if(obj!=null){
       var avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png"
 
       if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=null && req.body.avatar.startsWith("data:")){
-        avatar_link=await storageUpload(req.body.avatar,req.body.user_id,"avatar");
+        avatar_link=await storageUpload(req.body.avatar,obj.created,"avatar");
       }
 
       const result = await user_data.updateOne({
@@ -358,6 +359,7 @@ app.post('/setUserInfo', async (req, res, next) => {
         });
         refreshLatest();
       } else next(401);
+    }next(404);
     } else next(400);
 
   } catch (error) {
