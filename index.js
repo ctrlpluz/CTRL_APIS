@@ -331,7 +331,7 @@ app.post('/setUserInfo', async (req, res, next) => {
     if (typeof req.body.credential!='undefined' && typeof req.body.credential!=null) {
       var current_time=getMillis();
       req.body.user_id = decrypt(req.body.credential);
-      const obj = await user_data.updateOne({_id:ObjectId(req.body.user_id)});
+      const obj = await user_data.findOne({_id:ObjectId(req.body.user_id)});
       if(obj!=null){
       var avatar_link="https://cdn.iconscout.com/icon/free/png-512/avatar-372-456324.png"
 
