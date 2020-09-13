@@ -338,6 +338,10 @@ app.post('/setUserInfo', async (req, res, next) => {
       if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=null && req.body.avatar.startsWith("data:")){
         avatar_link=await storageUpload(req.body.avatar,obj.created,"avatar");
       }
+      
+      if(typeof req.body.avatar!='undefined' && typeof req.body.avatar!=null && req.body.avatar.startsWith("https://storage.googleapis.com/")){
+        avatar_link= req.body.avatar;
+      }
 
       const result = await user_data.updateOne({
         _id: ObjectId(req.body.user_id)
@@ -584,6 +588,9 @@ app.post('/updatePost', async (req, res, next) => {
         if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null && req.body.thumbnail.startsWith("data:")){
           thumb_link=await storageUpload(req.body.thumbnail, obj.created, "thumb");
         }
+        if(typeof req.body.thumbnail!='undefined' && typeof req.body.thumbnail!=null && req.body.thumbnail.startsWith("https://storage.googleapis.com/")){
+          thumb_link= req.body.thumbnail;
+        }
       
       var query = {
         _id: ObjectId(req.body.post_id),
@@ -628,8 +635,8 @@ app.post('/updatePost', async (req, res, next) => {
           published: req.body.published,
           modified: current_time,
           word_count: req.body.word_count,
-          duration: (req.body.word_count / 100),
-          url: encodeURI(host+"/"+categories[req.body.category].name+"/"+req.body.title+req.body.post_id)
+          duration: (req.body.word_count / 100)
+          //url: encodeURI(host+"/"+categories[req.body.category].name+"/"+req.body.title+req.body.post_id)
         });
       }
       } else {
